@@ -20,7 +20,8 @@
     display: flex; flex-direction: column; overflow: hidden; position: relative;
     height: 100vh; height: 100dvh;
   }
-  #bg { position: fixed; left: 0; top: 0; z-index: 0; }
+  #bg { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; animation: drift 45s ease-in-out infinite alternate; }
+  @keyframes drift { from { transform: scale(1.03) translate(-6px, 4px); } to { transform: scale(1.03) translate(6px, -4px); } }
   body::after { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .10; z-index: 1;
     background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, #000 3px); }
   header { display: flex; justify-content: space-between; align-items: center;
@@ -36,14 +37,14 @@
   #settings input { width: 100%; padding: 10px; margin: 6px 0 10px; border-radius: 10px; border: 1px solid var(--c2);
     background: #06131d; color: #cdf3ff; font-size: 16px; }
 
-  #hud { position: relative; height: 42vh; min-height: 250px; max-height: 400px; z-index: 2; flex: 0 0 auto; }
-  #eyewrap { position: absolute; left: 50%; top: 0; bottom: 74px; aspect-ratio: 1; transform: translateX(-50%); }
-  #eyesvg { width: 100%; height: 100%; filter: drop-shadow(0 0 10px var(--c)); overflow: visible; display: block; }
+  #hud { position: relative; height: 54vh; min-height: 320px; max-height: 560px; z-index: 2; flex: 0 0 auto; }
+  #eyewrap { position: absolute; left: 50%; top: 18px; bottom: 78px; aspect-ratio: 1; transform: translateX(-50%); }
+  #eyesvg { width: 100%; height: 100%; filter: drop-shadow(0 0 12px var(--c)); overflow: visible; display: block; }
   .ring { fill: none; stroke: var(--c); transform-box: view-box; transform-origin: 50% 50%; transition: stroke .4s; }
   .r1 { stroke-width: 1.2; stroke-dasharray: 2 5; animation: spin calc(40s * var(--spd)) linear infinite; }
   .r2 { stroke-width: 3; stroke-dasharray: 60 20 10 20; animation: spin calc(14s * var(--spd)) linear infinite reverse; }
   .r3 { stroke-width: 1.5; stroke-dasharray: 90 30; animation: spin calc(22s * var(--spd)) linear infinite; }
-  .r4 { stroke-width: 5; stroke-dasharray: 30 24; opacity: .8; animation: spin calc(9s * var(--spd)) linear infinite reverse; }
+  .r4 { stroke-width: 4; stroke-dasharray: 30 24; opacity: .8; animation: spin calc(9s * var(--spd)) linear infinite reverse; }
   .core { animation: pulse calc(3s * var(--spd)) ease-in-out infinite; transform-box: view-box; transform-origin: 50% 50%; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes pulse { 0%,100% { transform: scale(.94); opacity: .8; } 50% { transform: scale(1.06); opacity: 1; } }
@@ -57,8 +58,8 @@
   .sat::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px dashed var(--c); opacity: .6; animation: spin 14s linear infinite; }
   .sat::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c);
     top: -10px; left: 30px; transform-origin: 3px 43px; animation: spin 7s linear infinite; }
-  #satV { left: 12%; top: calc(50% - 70px); }
-  #satM { right: 12%; top: calc(50% - 70px); }
+  #satV { left: max(10px, calc(50% - 250px)); top: calc(50% - 60px); }
+  #satM { right: max(10px, calc(50% - 250px)); top: calc(50% - 60px); }
   #satT { left: 50%; bottom: 6px; margin-left: -33px; }
 
   #chat { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 12px; z-index: 2; -webkit-overflow-scrolling: touch; position: relative; }
@@ -89,7 +90,7 @@
 </style>
 </head>
 <body>
-<canvas id="bg"></canvas>
+<canvas id="bg" aria-hidden="true"></canvas>
 
 <header>
   <div class="brand">JARVIS</div>
@@ -114,10 +115,10 @@
           <stop id="g1" offset="60%" stop-color="#0a7fa6" stop-opacity=".5"/>
           <stop offset="100%" stop-color="#0a5f80" stop-opacity="0"/>
         </radialGradient>
-        <radialGradient id="sclera">
-          <stop offset="0%" stop-color="#f6f9fb"/>
-          <stop offset="70%" stop-color="#dfe7ee"/>
-          <stop offset="100%" stop-color="#b79a9a"/>
+        <radialGradient id="sclera" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stop-color="#f7fafc"/>
+          <stop offset="60%" stop-color="#e3eaf0"/>
+          <stop offset="100%" stop-color="#b58c8c"/>
         </radialGradient>
         <radialGradient id="irisG">
           <stop id="i0" offset="0%" stop-color="#0b3a4a"/>
@@ -125,33 +126,48 @@
           <stop id="i2" offset="82%" stop-color="#1590b5"/>
           <stop id="i3" offset="100%" stop-color="#03141b"/>
         </radialGradient>
-        <clipPath id="eyeClip"><path d="M58,100 Q100,60 142,100 Q100,140 58,100 Z"/></clipPath>
+        <linearGradient id="lidShadow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#000" stop-opacity=".6"/>
+          <stop offset="45%" stop-color="#000" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#000" stop-opacity=".25"/>
+        </linearGradient>
+        <clipPath id="eyeClip"><path d="M20,100 Q100,30 180,100 Q100,170 20,100 Z"/></clipPath>
         <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>
       </defs>
+
       <circle class="ring r1" cx="100" cy="100" r="96"/>
-      <circle class="ring r2" cx="100" cy="100" r="84"/>
-      <circle class="ring r3" cx="100" cy="100" r="70"/>
-      <circle class="ring r4" cx="100" cy="100" r="56"/>
-      <circle class="core" cx="100" cy="100" r="46" fill="url(#coreGrad)"/>
+      <circle class="ring r2" cx="100" cy="100" r="86"/>
+      <circle class="ring r3" cx="100" cy="100" r="74"/>
+      <circle class="ring r4" cx="100" cy="100" r="64"/>
+      <circle class="core" cx="100" cy="100" r="70" fill="url(#coreGrad)"/>
 
       <g clip-path="url(#eyeClip)">
-        <rect x="56" y="58" width="88" height="84" fill="url(#sclera)"/>
-        <path d="M60,100 L76,97 M62,103 L80,104 M140,100 L124,98 M138,104 L122,103" stroke="#b33" stroke-width=".6" opacity=".35" fill="none"/>
-        <g id="gaze">
-          <circle cx="100" cy="100" r="17" fill="url(#irisG)"/>
-          <circle cx="100" cy="100" r="14" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="0.8 2.2" opacity=".22"/>
-          <circle cx="100" cy="100" r="10" fill="none" stroke="#000" stroke-width="3" stroke-dasharray="0.7 1.9" opacity=".28"/>
-          <circle cx="100" cy="100" r="17" fill="none" stroke="#000" stroke-width="2.2" opacity=".75"/>
-          <circle id="pupil" cx="100" cy="100" r="7" fill="#000"/>
+        <rect x="15" y="55" width="170" height="90" fill="url(#sclera)"/>
+        <ellipse cx="27" cy="101" rx="9" ry="7" fill="#d98a8a" opacity=".75"/>
+        <g stroke="#b33" fill="none" stroke-width=".5" opacity=".35">
+          <path d="M22,100 Q40,96 58,98"/><path d="M26,104 Q44,106 60,103"/>
+          <path d="M34,98 Q42,90 50,88"/><path d="M178,100 Q160,96 142,98"/>
+          <path d="M176,104 Q158,106 142,104"/><path d="M168,98 Q158,90 150,89"/>
         </g>
-        <ellipse cx="93" cy="92" rx="5" ry="3" fill="#fff" opacity=".85" transform="rotate(-25 93 92)"/>
-        <circle cx="109" cy="108" r="1.8" fill="#fff" opacity=".55"/>
-        <path d="M58,100 Q100,60 142,100 Q100,140 58,100 Z" fill="none" stroke="#000" stroke-width="9" opacity=".55" filter="url(#soft)"/>
+        <g id="gaze">
+          <circle cx="100" cy="100" r="31" fill="url(#irisG)"/>
+          <g id="fibD" stroke="#000" stroke-width=".7" opacity=".5"></g>
+          <g id="fibL" stroke="#9eeaff" stroke-width=".6" opacity=".6"></g>
+          <circle id="colr" cx="100" cy="100" r="16" fill="none" stroke="#fff" stroke-width="1.6" opacity=".35"/>
+          <circle cx="100" cy="100" r="30.5" fill="none" stroke="#000" stroke-width="3.2" opacity=".85"/>
+          <circle id="pupil" cx="100" cy="100" r="11" fill="#000"/>
+        </g>
+        <ellipse cx="85" cy="85" rx="9" ry="5" fill="#fff" opacity=".85" transform="rotate(-25 85 85)"/>
+        <circle cx="117" cy="114" r="3" fill="#fff" opacity=".5"/>
+        <rect x="15" y="55" width="170" height="90" fill="url(#lidShadow)"/>
+        <path d="M20,100 Q100,30 180,100 Q100,170 20,100 Z" fill="none" stroke="#000" stroke-width="12" opacity=".5" filter="url(#soft)"/>
         <path id="lidU" fill="#04101a"/>
         <path id="lidL" fill="#04101a"/>
       </g>
-      <path id="edgeU" fill="none" stroke="var(--c)" stroke-width="1.6" stroke-linecap="round"/>
-      <path id="edgeL" fill="none" stroke="var(--c)" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M28,88 Q100,8 172,88" fill="none" style="stroke:var(--c2)" stroke-width="1.2" opacity=".6"/>
+      <path id="edgeU" fill="none" style="stroke:var(--c)" stroke-width="1.8" stroke-linecap="round"/>
+      <path id="edgeL" fill="none" style="stroke:var(--c)" stroke-width="1.8" stroke-linecap="round"/>
+      <g id="lashes" style="stroke:var(--c)" stroke-width="1" stroke-linecap="round"></g>
     </svg>
   </div>
 
@@ -301,14 +317,33 @@ $("mic").onclick = () => {
 };
 
 /* ---------- OCCHIO ---------- */
+const NS = "http://www.w3.org/2000/svg";
+(function buildEye() {
+  const fd = $("fibD"), fl = $("fibL");
+  for (let i = 0; i < 110; i++) {
+    const a = Math.random() * Math.PI * 2, r1 = 12 + Math.random() * 4, r2 = 22 + Math.random() * 8;
+    const ln = document.createElementNS(NS, "line");
+    ln.setAttribute("x1", (100 + Math.cos(a) * r1).toFixed(2));
+    ln.setAttribute("y1", (100 + Math.sin(a) * r1).toFixed(2));
+    ln.setAttribute("x2", (100 + Math.cos(a + (Math.random() - .5) * .12) * r2).toFixed(2));
+    ln.setAttribute("y2", (100 + Math.sin(a + (Math.random() - .5) * .12) * r2).toFixed(2));
+    ln.setAttribute("stroke-opacity", (0.3 + Math.random() * 0.7).toFixed(2));
+    (i % 2 ? fl : fd).appendChild(ln);
+  }
+  const g = $("lashes");
+  for (let i = 0; i < 18; i++) g.appendChild(document.createElementNS(NS, "line"));
+})();
+
 const HUES = [190, 125, 40, 0, 275, 330, 215];
 let hueNow = 190;
 function setHue(h) {
   hueNow = h;
   const set = (id, c) => $(id).setAttribute("stop-color", c);
-  set("i0", `hsl(${h},85%,22%)`); set("i1", `hsl(${h},95%,62%)`);
-  set("i2", `hsl(${h},90%,42%)`); set("i3", `hsl(${h},90%,10%)`);
+  set("i0", `hsl(${h},85%,20%)`); set("i1", `hsl(${h},95%,60%)`);
+  set("i2", `hsl(${h},90%,40%)`); set("i3", `hsl(${h},90%,10%)`);
   set("g0", `hsl(${h},100%,72%)`); set("g1", `hsl(${h},100%,40%)`);
+  $("fibL").setAttribute("stroke", `hsl(${h},100%,80%)`);
+  $("colr").setAttribute("stroke", `hsl(${h},100%,85%)`);
 }
 setHue(190);
 
@@ -319,7 +354,7 @@ window.addEventListener("pointermove", e => {
   const r = $("eyesvg").getBoundingClientRect();
   const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
   const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
-  eye.tx = clamp(dx * 24, -22, 22); eye.ty = clamp(dy * 10, -8, 8);
+  eye.tx = clamp(dx * 34, -30, 30); eye.ty = clamp(dy * 14, -10, 10);
   eye.mouse = true; eye.mouseT = performance.now();
 });
 
@@ -329,8 +364,8 @@ function frame(t) {
   if (t > eye.nextLook) {
     if (!eye.mouse || t > eye.mouseT + 2500) {
       eye.mouse = false;
-      eye.tx = (Math.random() * 2 - 1) * 20;
-      eye.ty = (Math.random() * 2 - 1) * 7;
+      eye.tx = (Math.random() * 2 - 1) * 26;
+      eye.ty = (Math.random() * 2 - 1) * 8;
     }
     eye.nextLook = t + 500 + Math.random() * 1800;
   }
@@ -352,15 +387,28 @@ function frame(t) {
     } else eye.o = 1 - Math.sin(Math.PI * eye.bt);
   }
 
-  const base = thinking ? 4.5 : listening ? 9.5 : 7;
-  $("pupil").setAttribute("r", (base + Math.sin(t / 900) * 0.5).toFixed(2));
+  const base = thinking ? 8 : listening ? 14 : 11;
+  $("pupil").setAttribute("r", (base + Math.sin(t / 900) * 0.6).toFixed(2));
   $("gaze").setAttribute("transform", `translate(${eye.gx.toFixed(2)} ${eye.gy.toFixed(2)})`);
 
-  const cu = 100 - 40 * eye.o, cl = 100 + 40 * eye.o;
-  $("lidU").setAttribute("d", `M58,100 Q100,${cu} 142,100 L142,40 L58,40 Z`);
-  $("lidL").setAttribute("d", `M58,100 Q100,${cl} 142,100 L142,160 L58,160 Z`);
-  $("edgeU").setAttribute("d", `M58,100 Q100,${cu} 142,100`);
-  $("edgeL").setAttribute("d", `M58,100 Q100,${cl} 142,100`);
+  const o = eye.o, cu = 100 - 70 * o, cl = 100 + 70 * o;
+  $("lidU").setAttribute("d", `M20,100 Q100,${cu.toFixed(2)} 180,100 L180,0 L20,0 Z`);
+  $("lidL").setAttribute("d", `M20,100 Q100,${cl.toFixed(2)} 180,100 L180,200 L20,200 Z`);
+  $("edgeU").setAttribute("d", `M20,100 Q100,${cu.toFixed(2)} 180,100`);
+  $("edgeL").setAttribute("d", `M20,100 Q100,${cl.toFixed(2)} 180,100`);
+
+  const ls = $("lashes").children, N = ls.length;
+  for (let i = 0; i < N; i++) {
+    const tt = (i + 1) / (N + 1), m = 1 - tt;
+    const x = 20 + 160 * tt;
+    const y = 100 * (m * m + tt * tt) + 2 * m * tt * cu;
+    const dx = 160, dy = 2 * (cu - 100) * (1 - 2 * tt);
+    const len = Math.hypot(dx, dy) || 1;
+    const L = (5 + 5 * Math.sin(Math.PI * tt)) * o;
+    ls[i].setAttribute("x1", x.toFixed(2)); ls[i].setAttribute("y1", y.toFixed(2));
+    ls[i].setAttribute("x2", (x + dy / len * L).toFixed(2)); ls[i].setAttribute("y2", (y - dx / len * L).toFixed(2));
+    ls[i].setAttribute("opacity", (0.75 * o).toFixed(2));
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -492,13 +540,13 @@ function drawScene() {
   }
   const m = Math.min(w, h);
   // gigante gassoso
-  glow(w * .9, h * .2, m * .1, "rgba(255,170,90,.25)");
-  banded(w * .9, h * .2, m * .1, ["#c98b5a", "#e6b98a", "#a5683f", "#d9a673", "#b57a4b", "#e8c79c", "#9b5f3a"], -0.15);
+  glow(w * .9, h * .2, m * .12, "rgba(255,170,90,.25)");
+  banded(w * .9, h * .2, m * .12, ["#c98b5a", "#e6b98a", "#a5683f", "#d9a673", "#b57a4b", "#e8c79c", "#9b5f3a"], -0.15);
   // pianeta rosso
-  glow(w * .06, h * .72, m * .06, "rgba(255,80,50,.25)");
-  banded(w * .06, h * .72, m * .06, ["#a33c25", "#c4573a", "#8e2f1d", "#b8482f"], 0.3);
+  glow(w * .06, h * .72, m * .07, "rgba(255,80,50,.25)");
+  banded(w * .06, h * .72, m * .07, ["#a33c25", "#c4573a", "#8e2f1d", "#b8482f"], 0.3);
   // pianeta ad anelli
-  const rx = w * .93, ry = h * .62, rr = m * .06;
+  const rx = w * .93, ry = h * .62, rr = m * .07;
   bctx.save(); bctx.strokeStyle = "rgba(220,200,160,.55)"; bctx.lineWidth = rr * .28;
   bctx.beginPath(); bctx.ellipse(rx, ry, rr * 1.9, rr * .5, -0.4, Math.PI, 2 * Math.PI); bctx.stroke(); bctx.restore();
   banded(rx, ry, rr, ["#d8c48c", "#c2ab70", "#e4d4a2", "#b9a265"], -0.4);
