@@ -22,6 +22,8 @@
   }
   #bg { position: fixed; left: 0; top: 0; z-index: 0; pointer-events: none; animation: drift 45s ease-in-out infinite alternate; }
   @keyframes drift { from { transform: scale(1.03) translate(-6px, 4px); } to { transform: scale(1.03) translate(6px, -4px); } }
+  #planets { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .pl { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
   body::after { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .10; z-index: 1;
     background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, #000 3px); }
   header { display: flex; justify-content: space-between; align-items: center;
@@ -91,6 +93,7 @@
 </head>
 <body>
 <canvas id="bg" aria-hidden="true"></canvas>
+<div id="planets" aria-hidden="true"></div>
 
 <header>
   <div class="brand">JARVIS</div>
@@ -237,6 +240,10 @@ function addMsg(text, who) {
 let voiceCfg = { name: "", rate: 1, pitch: 1 };
 try { Object.assign(voiceCfg, JSON.parse(store.get("jarvis_voice", "{}"))); } catch (e) {}
 function saveVoice() { store.set("jarvis_voice", JSON.stringify(voiceCfg)); }
+function itVoices() {
+  if (!window.speechSynthesis) return [];
+  return speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().replace("_", "-").startsWith("it"));
+}
 if (window.speechSynthesis) speechSynthesis.getVoices();
 
 function speak(text) {
@@ -244,8 +251,8 @@ function speak(text) {
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(String(text).replace(/[*_#`]/g, ""));
   u.lang = "it-IT";
-  const vs = speechSynthesis.getVoices();
-  const v = vs.find(v => v.name === voiceCfg.name) || vs.find(v => v.lang && v.lang.toLowerCase().startsWith("it"));
+  const it = itVoices();
+  const v = it.find(v => v.name === voiceCfg.name) || it[0];
   if (v) u.voice = v;
   u.rate = Number(voiceCfg.rate) || 1;
   u.pitch = Number(voiceCfg.pitch) || 1;
@@ -349,6 +356,8 @@ setHue(190);
 
 const eye = { gx: 0, gy: 0, tx: 0, ty: 0, o: 1, blinking: false, bt: 0, changed: false, next: performance.now() + 2500, nextLook: 0, mouse: false, mouseT: 0 };
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const par = { x: 0, y: 0, tx: 0, ty: 0 };
+let moonAng = 0.6;
 
 window.addEventListener("pointermove", e => {
   const r = $("eyesvg").getBoundingClientRect();
@@ -356,6 +365,8 @@ window.addEventListener("pointermove", e => {
   const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
   eye.tx = clamp(dx * 34, -30, 30); eye.ty = clamp(dy * 14, -10, 10);
   eye.mouse = true; eye.mouseT = performance.now();
+  par.tx = (e.clientX / window.innerWidth - 0.5) * 2;
+  par.ty = (e.clientY / window.innerHeight - 0.5) * 2;
 });
 
 let lastT = performance.now();
@@ -409,11 +420,196 @@ function frame(t) {
     ls[i].setAttribute("x2", (x + dy / len * L).toFixed(2)); ls[i].setAttribute("y2", (y - dx / len * L).toFixed(2));
     ls[i].setAttribute("opacity", (0.75 * o).toFixed(2));
   }
+
+  /* pianeti: parallasse e orbita lunare */
+  par.x += (par.tx - par.x) * 0.05;
+  par.y += (par.ty - par.y) * 0.05;
+  const T = t / 1000;
+  let idx = 0;
+  for (const key in PL) {
+    const p = PL[key];
+    if (!p || !p.el || key === "moon") continue;
+    idx++;
+    p.ox = -par.x * p.depth + Math.sin(T / 5 + idx) * 3;
+    p.oy = -par.y * p.depth * 0.7 + Math.cos(T / 6 + idx * 2) * 3;
+    p.el.style.transform = `translate3d(${(p.cx - p.side / 2 + p.ox).toFixed(1)}px,${(p.cy - p.side / 2 + p.oy).toFixed(1)}px,0)`;
+  }
+  if (PL.moon && PL.earth) {
+    const e = PL.earth, mo = PL.moon;
+    moonAng += dt * 0.00018;
+    const sx = Math.cos(moonAng), sy = Math.sin(moonAng);
+    const mx = e.cx + e.ox + sx * e.r * 1.9 - par.x * (mo.depth - e.depth);
+    const my = e.cy + e.oy + sy * e.r * 0.5 - e.r * 0.55 - par.y * (mo.depth - e.depth) * 0.7;
+    const sc = 1 + 0.3 * sy;
+    mo.el.style.transform = `translate3d(${(mx - mo.side / 2).toFixed(1)}px,${(my - mo.side / 2).toFixed(1)}px,0) scale(${sc.toFixed(3)})`;
+    mo.el.style.zIndex = sy > 0 ? 2 : 0;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-/* ---------- SFONDO: PIANETI E TERRA ---------- */
+/* ---------- SFONDO: STELLE ---------- */
+const bg = $("bg"), bctx = bg.getContext("2d");
+function drawStars(w, h, dpr) {
+  bg.width = w * dpr; bg.height = h * dpr; bg.style.width = w + "px"; bg.style.height = h + "px";
+  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sky = bctx.createRadialGradient(w / 2, h * .25, 10, w / 2, h * .25, Math.max(w, h));
+  sky.addColorStop(0, "#0a2236"); sky.addColorStop(1, "#02070d");
+  bctx.fillStyle = sky; bctx.fillRect(0, 0, w, h);
+  let s = 12345; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 260; i++) {
+    const x = rnd() * w, y = rnd() * h, r = rnd() * 1.3 + .2, a = rnd() * .7 + .2;
+    bctx.fillStyle = `rgba(200,235,255,${a})`; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
+  }
+}
+
+/* ---------- RUMORE 3D ---------- */
+function hash3(x, y, z) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1440670441)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  let fx = x - xi, fy = y - yi, fz = z - zi;
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz);
+  const a = hash3(xi, yi, zi), b = hash3(xi + 1, yi, zi), c = hash3(xi, yi + 1, zi), d = hash3(xi + 1, yi + 1, zi);
+  const e = hash3(xi, yi, zi + 1), f = hash3(xi + 1, yi, zi + 1), g = hash3(xi, yi + 1, zi + 1), h = hash3(xi + 1, yi + 1, zi + 1);
+  const x1 = a + (b - a) * fx, x2 = c + (d - c) * fx, x3 = e + (f - e) * fx, x4 = g + (h - g) * fx;
+  const y1 = x1 + (x2 - x1) * fy, y2 = x3 + (x4 - x3) * fy;
+  return y1 + (y2 - y1) * fz;
+}
+function fbm3(x, y, z, oct) {
+  let s = 0, a = 0.5;
+  for (let i = 0; i < oct; i++) { s += a * noise3(x, y, z); x *= 2.03; y *= 2.03; z *= 2.03; a *= 0.5; }
+  return s;
+}
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mixn = (a, b, t) => a + (b - a) * t;
+const mixc = (c1, c2, t) => [mixn(c1[0], c2[0], t), mixn(c1[1], c2[1], t), mixn(c1[2], c2[2], t)];
+
+/* ---------- TEXTURE DEI PIANETI ---------- */
+const PAL_GAS = [[238, 218, 184], [190, 132, 86], [126, 82, 56]];
+const PAL_SAT = [[242, 228, 194], [216, 186, 134], [178, 144, 100]];
+function texGas(x, y, z, lat, lon, pal, storm) {
+  const w = fbm3(x * 2.4 + 3, y * 5, z * 2.4, 4);
+  const t = lat * 10 + (w - 0.47) * 4.0;
+  let b = 0.5 + 0.5 * Math.sin(t);
+  b = b * 0.75 + 0.25 * fbm3(x * 6, y * 16, z * 6, 3);
+  let c = b < 0.5 ? mixc(pal[0], pal[1], b * 2) : mixc(pal[1], pal[2], (b - 0.5) * 2);
+  if (storm) {
+    let dl = lon - 0.6; dl = Math.atan2(Math.sin(dl), Math.cos(dl));
+    const sx = dl * Math.cos(lat) / 0.5, sy = (lat + 0.38) / 0.2, dd = sx * sx + sy * sy;
+    if (dd < 1.3) c = mixc(c, [196, 86, 52], smooth(1.3, 0.4, dd) * 0.85);
+  }
+  return c;
+}
+function texMars(x, y, z, lat) {
+  const n = fbm3(x * 3.5, y * 3.5, z * 3.5, 5);
+  const m2 = fbm3(x * 9 + 5, y * 9, z * 9, 3);
+  let c = [150 + (n - 0.5) * 130, 70 + (n - 0.5) * 75, 45 + (n - 0.5) * 55];
+  const dark = smooth(0.52, 0.68, fbm3(x * 1.6 + 9, y * 1.6, z * 1.6, 3));
+  c = mixc(c, [74, 38, 30], dark * 0.7);
+  c = mixc(c, [120, 56, 40], smooth(0.55, 0.75, m2) * 0.35);
+  if (Math.abs(y) > 0.88 + (m2 - 0.5) * 0.1) c = mixc(c, [240, 236, 232], 0.9);
+  return c;
+}
+function texMoon(x, y, z) {
+  const n = fbm3(x * 4, y * 4, z * 4, 4);
+  const maria = smooth(0.5, 0.62, fbm3(x * 1.8 + 4, y * 1.8, z * 1.8, 3));
+  let v = 165 + (n - 0.5) * 70;
+  v *= 1 - maria * 0.4;
+  if (noise3(x * 22, y * 22, z * 22) > 0.86) v *= 0.72;
+  return [v, v * 0.98, v * 0.94];
+}
+
+const SPEC_GAS = { rad: 0.74, tilt: 0.12, spin: 0.8, atm: [255, 190, 130], atmS: 0.5, tex: (x, y, z, la, lo) => texGas(x, y, z, la, lo, PAL_GAS, true) };
+const SPEC_MARS = { rad: 0.74, tilt: 0.3, spin: 2.0, atm: [255, 120, 80], atmS: 0.35, tex: (x, y, z, la) => texMars(x, y, z, la) };
+const RING_A = -0.4;
+const SPEC_SAT = { rad: 0.385, tilt: -RING_A, spin: 1.2, atm: [240, 220, 170], atmS: 0.3, ring: { a: RING_A, q: 0.3, inn: 1.3, out: 2.3 }, tex: (x, y, z, la, lo) => texGas(x, y, z, la, lo, PAL_SAT, false) };
+const SPEC_MOON = { rad: 0.8, tilt: 0, spin: 0.5, atm: null, atmS: 0, tex: (x, y, z) => texMoon(x, y, z) };
+
+/* ---------- RENDER SFERA 3D ---------- */
+function renderPlanet(sp, res, L) {
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = res;
+  const cx = cv.getContext("2d");
+  const img = cx.createImageData(res, res);
+  const d = img.data;
+  const half = res / 2, Rp = sp.rad * half;
+  const ct = Math.cos(sp.tilt), st = Math.sin(sp.tilt), cs = Math.cos(sp.spin), ss = Math.sin(sp.spin);
+  const ring = sp.ring;
+  const ca = ring ? Math.cos(ring.a) : 1, sa = ring ? Math.sin(ring.a) : 0, q = ring ? ring.q : 1;
+  let lx2 = 0, lz2 = 1;
+  if (ring) { const lu = L[0] * ca + L[1] * sa, ll = Math.hypot(lu, L[2]) || 1; lx2 = lu / ll; lz2 = L[2] / ll; }
+  let R = 0, G = 0, B = 0, A = 0;
+  const over = (r, g, b, a) => {
+    if (a <= 0) return;
+    const oa = a + A * (1 - a);
+    R = (r * a + R * A * (1 - a)) / oa; G = (g * a + G * A * (1 - a)) / oa; B = (b * a + B * A * (1 - a)) / oa; A = oa;
+  };
+  for (let y = 0; y < res; y++) {
+    for (let x = 0; x < res; x++) {
+      R = G = B = A = 0;
+      const sx = x + 0.5 - half, sy = half - (y + 0.5);
+      const ux = sx / Rp, uy = sy / Rp, rho = Math.hypot(ux, uy);
+
+      let rA = 0, rR = 0, rG = 0, rB = 0, rFront = false;
+      if (ring) {
+        const u = sx * ca + sy * sa, w = -sx * sa + sy * ca;
+        const X = u / Rp, Z = -w / (q * Rp);
+        const rr = Math.hypot(X, Z);
+        if (rr > ring.inn && rr < ring.out) {
+          let dens = 0.55 + 0.45 * Math.sin(rr * 46) * Math.sin(rr * 13 + 1.3);
+          dens *= 0.75 + 0.25 * noise3(rr * 40, 3.1, 7.7);
+          if (rr > 1.92 && rr < 2.0) dens *= 0.08;
+          dens = clamp(dens, 0, 1);
+          const edge = smooth(ring.inn, ring.inn + 0.04, rr) * (1 - smooth(ring.out - 0.05, ring.out, rr));
+          rA = dens * 0.92 * edge;
+          let sh = 1;
+          const dp = X * lx2 + Z * lz2;
+          if (dp < 0 && Math.abs(X * lz2 - Z * lx2) < 1) sh = 0.22;
+          const lum = 0.85 * sh;
+          rR = 218 * lum; rG = 198 * lum; rB = 160 * lum;
+          rFront = w < 0;
+        }
+      }
+      if (rA > 0 && !rFront) over(rR, rG, rB, rA);
+
+      if (rho >= 1 && sp.atm && rho < 1.16) {
+        let g = 1 - (rho - 1) / 0.16; g *= g;
+        const ld = clamp(0.35 + 0.65 * ((ux * L[0] + uy * L[1]) / rho), 0, 1);
+        over(sp.atm[0], sp.atm[1], sp.atm[2], g * 0.55 * ld * sp.atmS * 1.6);
+      }
+
+      if (rho < 1) {
+        const nx = ux, ny = uy, nz = Math.sqrt(1 - rho * rho);
+        const tx = nx * ct - ny * st, ty = nx * st + ny * ct, tz = nz;
+        const px = tx * cs + tz * ss, pz = -tx * ss + tz * cs, py = ty;
+        const lat = Math.asin(clamp(py, -1, 1)), lon = Math.atan2(pz, px);
+        const c = sp.tex(px, py, pz, lat, lon);
+        const ndl = nx * L[0] + ny * L[1] + nz * L[2];
+        let lit = 0.035 + 0.965 * Math.pow(Math.max(0, ndl), 0.85);
+        lit *= 0.6 + 0.4 * nz;
+        let r = c[0] * lit, g = c[1] * lit, b = c[2] * lit;
+        if (sp.atm) {
+          const rim = Math.pow(1 - nz, 2.6) * (0.25 + 0.75 * smooth(-0.1, 0.4, ndl)) * sp.atmS * 1.6;
+          r += sp.atm[0] * rim; g += sp.atm[1] * rim; b += sp.atm[2] * rim;
+        }
+        over(r, g, b, clamp((1 - rho) * Rp, 0, 1));
+      }
+
+      if (rA > 0 && rFront) over(rR, rG, rB, rA);
+
+      const i = (y * res + x) * 4;
+      d[i] = R; d[i + 1] = G; d[i + 2] = B; d[i + 3] = A * 255;
+    }
+  }
+  cx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/* ---------- TERRA ---------- */
 const POLYS = [
   [[-166,68],[-156,71],[-140,70],[-125,70],[-110,68],[-95,72],[-85,69],[-82,64],[-94,59],[-90,52],[-82,52],[-79,57],[-77,60],[-70,60],[-62,58],[-56,52],[-66,45],[-70,43],[-74,40],[-76,35],[-81,31],[-80,26],[-82,29],[-86,30],[-90,29],[-94,29],[-97,26],[-97,22],[-95,19],[-91,19],[-90,21],[-87,21],[-88,16],[-84,15],[-83,10],[-80,8],[-78,9],[-82,8],[-86,11],[-92,14],[-97,16],[-105,20],[-109,26],[-114,31],[-117,33],[-121,35],[-124,40],[-124,47],[-128,51],[-134,57],[-141,60],[-150,60],[-158,57],[-165,55],[-160,59],[-166,62]],
   [[-73,78],[-60,82],[-30,83],[-20,80],[-20,70],[-30,68],[-43,60],[-50,64],[-55,70],[-68,76]],
@@ -448,10 +644,10 @@ function buildLand() {
     }
   }
 }
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 function renderEarth(size, lon0, lat0) {
   if (!LAND) buildLand();
+  const rad = 0.8;
   const cv = document.createElement("canvas");
   cv.width = cv.height = size;
   const cx = cv.getContext("2d");
@@ -465,13 +661,27 @@ function renderEarth(size, lon0, lat0) {
   const sinD = Math.sin(dec), cosD = Math.cos(dec);
   const p0 = lat0 * Math.PI / 180, l0 = lon0 * Math.PI / 180;
   const sp = Math.sin(p0), cp = Math.cos(p0);
+  const dls = lons - l0;
+  const Sx = cosD * Math.sin(dls), Sy = cp * sinD - sp * cosD * Math.cos(dls), Sz = sp * sinD + cp * cosD * Math.cos(dls);
+  const Hx = Sx, Hy = Sy, Hz = Sz + 1, hl = Math.hypot(Hx, Hy, Hz) || 1;
+  const Rpx = size * rad / 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const nx = (x + 0.5) / size * 2 - 1, ny = 1 - (y + 0.5) / size * 2;
+      const nx = ((x + 0.5) / size * 2 - 1) / rad, ny = (1 - (y + 0.5) / size * 2) / rad;
       const rho = Math.hypot(nx, ny);
-      if (rho >= 1) continue;
+      const i = (y * size + x) * 4;
+      if (rho >= 1) {
+        if (rho < 1.2) {
+          let g = 1 - (rho - 1) / 0.2; g *= g;
+          const ux = nx / rho, uy = ny / rho;
+          const ld = clamp(0.4 + 0.6 * (ux * Sx + uy * Sy) + 0.4 * Sz, 0.12, 1);
+          d[i] = 120; d[i + 1] = 185; d[i + 2] = 255; d[i + 3] = g * 0.55 * ld * 255;
+        }
+        continue;
+      }
       const c = Math.asin(rho), sc = Math.sin(c), cc = Math.cos(c);
       let phi, lam;
+      const bx = nx * rad, by = ny * rad;
       if (rho < 1e-6) { phi = p0; lam = l0; }
       else {
         phi = Math.asin(clamp(cc * sp + ny * sc * cp / rho, -1, 1));
@@ -494,78 +704,107 @@ function renderEarth(size, lon0, lat0) {
         else { dr = 62; dg = 132; db = 72; }
         nr = 14; ng = 28; nb = 30;
       } else { dr = 22; dg = 90; db = 172; nr = 4; ng = 10; nb = 26; }
-      const i = (y * size + x) * 4;
-      d[i] = nr + (dr * lit - nr) * f;
-      d[i + 1] = ng + (dg * lit - ng) * f;
-      d[i + 2] = nb + (db * lit - nb) * f;
-      d[i + 3] = clamp((1 - rho) * size * 0.5, 0, 1) * 255;
+      let r = nr + (dr * lit - nr) * f, g = ng + (dg * lit - ng) * f, b = nb + (db * lit - nb) * f;
+
+      const px = Math.cos(phi) * Math.cos(lam), py = Math.sin(phi), pz = Math.cos(phi) * Math.sin(lam);
+      const cl = smooth(0.52, 0.74, fbm3(px * 3.2 + 11, py * 5.1, pz * 3.2, 4));
+      const ccr = 18 + (252 * lit - 18) * f, ccg = 22 + (252 * lit - 22) * f, ccb = 32 + (255 * lit - 32) * f;
+      r = r * (1 - cl * 0.85) + ccr * cl * 0.85;
+      g = g * (1 - cl * 0.85) + ccg * cl * 0.85;
+      b = b * (1 - cl * 0.85) + ccb * cl * 0.85;
+
+      if (land && f < 0.6) {
+        const lg = smooth(0.63, 0.7, fbm3(px * 16, py * 16, pz * 16, 3)) * (1 - f) * (1 - cl * 0.7) * 0.9;
+        r += 255 * lg; g += 196 * lg; b += 110 * lg;
+      }
+      if (!land && f > 0) {
+        const nh = Math.max(0, (bx / rad * Hx + by / rad * Hy + cc * Hz) / hl);
+        const spc = Math.pow(nh, 60) * f * (1 - cl) * 0.85;
+        r += 255 * spc; g += 255 * spc; b += 240 * spc;
+      }
+      const rim = Math.pow(1 - cc, 3) * (0.15 + 0.85 * f) * 0.9;
+      r += 70 * rim; g += 140 * rim; b += 255 * rim;
+
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+      d[i + 3] = clamp((1 - rho) * Rpx, 0, 1) * 255;
     }
   }
   cx.putImageData(img, 0, 0);
   return cv;
 }
 
-const bg = $("bg"), bctx = bg.getContext("2d");
-function shade(x, y, r) {
-  const g = bctx.createRadialGradient(x - r * .4, y - r * .4, r * .1, x, y, r * 1.05);
-  g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.6, "rgba(0,0,0,.25)"); g.addColorStop(1, "rgba(0,0,0,.85)");
-  bctx.fillStyle = g; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
-}
-function banded(x, y, r, cols, tilt) {
-  bctx.save(); bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.clip();
-  bctx.translate(x, y); bctx.rotate(tilt);
-  const n = cols.length;
-  for (let i = 0; i < n; i++) { bctx.fillStyle = cols[i]; bctx.fillRect(-r * 1.5, -r + i * (2 * r / n), 3 * r, 2 * r / n + 1); }
-  bctx.restore(); shade(x, y, r);
-}
-function glow(x, y, r, col) {
-  const g = bctx.createRadialGradient(x, y, r * .95, x, y, r * 1.35);
-  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
-  bctx.fillStyle = g; bctx.beginPath(); bctx.arc(x, y, r * 1.35, 0, 7); bctx.fill();
-}
+/* ---------- SCENA: PIANETI DI SFONDO ---------- */
+const planetsEl = $("planets");
+const PL = {};
 function getLoc() { try { return JSON.parse(store.get("jarvis_loc", "null")); } catch (e) { return null; } }
 
-function drawScene() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = window.innerWidth, h = window.innerHeight;
-  bg.width = w * dpr; bg.height = h * dpr; bg.style.width = w + "px"; bg.style.height = h + "px";
-  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const sky = bctx.createRadialGradient(w / 2, h * .25, 10, w / 2, h * .25, Math.max(w, h));
-  sky.addColorStop(0, "#0a2236"); sky.addColorStop(1, "#02070d");
-  bctx.fillStyle = sky; bctx.fillRect(0, 0, w, h);
-  let s = 12345; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 260; i++) {
-    const x = rnd() * w, y = rnd() * h, r = rnd() * 1.3 + .2, a = rnd() * .7 + .2;
-    bctx.fillStyle = `rgba(200,235,255,${a})`; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
-  }
-  const m = Math.min(w, h);
-  // gigante gassoso
-  glow(w * .9, h * .2, m * .12, "rgba(255,170,90,.25)");
-  banded(w * .9, h * .2, m * .12, ["#c98b5a", "#e6b98a", "#a5683f", "#d9a673", "#b57a4b", "#e8c79c", "#9b5f3a"], -0.15);
-  // pianeta rosso
-  glow(w * .06, h * .72, m * .07, "rgba(255,80,50,.25)");
-  banded(w * .06, h * .72, m * .07, ["#a33c25", "#c4573a", "#8e2f1d", "#b8482f"], 0.3);
-  // pianeta ad anelli
-  const rx = w * .93, ry = h * .62, rr = m * .07;
-  bctx.save(); bctx.strokeStyle = "rgba(220,200,160,.55)"; bctx.lineWidth = rr * .28;
-  bctx.beginPath(); bctx.ellipse(rx, ry, rr * 1.9, rr * .5, -0.4, Math.PI, 2 * Math.PI); bctx.stroke(); bctx.restore();
-  banded(rx, ry, rr, ["#d8c48c", "#c2ab70", "#e4d4a2", "#b9a265"], -0.4);
-  bctx.save(); bctx.strokeStyle = "rgba(235,215,170,.8)"; bctx.lineWidth = rr * .28;
-  bctx.beginPath(); bctx.ellipse(rx, ry, rr * 1.9, rr * .5, -0.4, 0, Math.PI); bctx.stroke(); bctx.restore();
-  // Terra
-  const er = m * 0.15;
-  const ex = Math.max(er * 1.15, w * .11), ey = Math.max(er * 1.2, h * .25);
+function refreshEarth() {
+  const p = PL.earth;
+  if (!p) return;
   const loc = getLoc();
   const lon0 = loc ? loc.lon : 12.5;
   const lat0 = loc ? clamp(loc.lat * 0.5 + 10, -30, 50) : 25;
-  glow(ex, ey, er, "rgba(90,170,255,.5)");
-  bctx.drawImage(renderEarth(240, lon0, lat0), ex - er, ey - er, 2 * er, 2 * er);
-  // luna
-  banded(ex + er * 1.6, ey - er * .8, m * .022, ["#b9b9b9", "#9d9d9d", "#c8c8c8"], 0.5);
+  const cv = renderEarth(300, lon0, lat0);
+  const cx = p.el.getContext("2d");
+  cx.clearRect(0, 0, 300, 300);
+  cx.drawImage(cv, 0, 0);
 }
-let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(drawScene, 200); });
-drawScene();
-setInterval(drawScene, 60000);
+
+function layoutScene() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight, m = Math.min(w, h);
+  drawStars(w, h, dpr);
+  const ec = { x: w / 2, y: h * 0.3 };
+  const lightFor = (cx, cy) => {
+    const x = (ec.x - cx) / w * 1.8, y = (cy - ec.y) / h * 1.8, z = 0.55;
+    const l = Math.hypot(x, y, z);
+    return [x / l, y / l, z / l];
+  };
+  const key = w + "x" + h;
+  const defs = [
+    { k: "gas", cx: w * 0.9, cy: h * 0.2, r: m * 0.12, depth: 14, sp: SPEC_GAS },
+    { k: "mars", cx: w * 0.07, cy: h * 0.74, r: m * 0.07, depth: 20, sp: SPEC_MARS },
+    { k: "sat", cx: w * 0.86, cy: h * 0.64, r: m * 0.065, depth: 22, sp: SPEC_SAT }
+  ];
+  for (const df of defs) {
+    let p = PL[df.k];
+    if (!p || p.key !== key) {
+      const side = 2 * df.r / df.sp.rad;
+      const res = Math.round(Math.min(420, side * dpr));
+      const cv = renderPlanet(df.sp, res, lightFor(df.cx, df.cy));
+      cv.className = "pl";
+      cv.style.width = side + "px"; cv.style.height = side + "px";
+      if (p && p.el) p.el.remove();
+      planetsEl.appendChild(cv);
+      PL[df.k] = { el: cv, side, cx: df.cx, cy: df.cy, depth: df.depth, key, r: df.r, ox: 0, oy: 0 };
+    }
+  }
+  const er = m * 0.15;
+  const ex = Math.max(er * 1.15, w * 0.11), ey = Math.max(er * 1.2, h * 0.25);
+  if (!PL.earth || PL.earth.key !== key) {
+    const side = 2 * er / 0.8;
+    const el = document.createElement("canvas");
+    el.className = "pl"; el.width = 300; el.height = 300;
+    el.style.width = side + "px"; el.style.height = side + "px"; el.style.zIndex = 1;
+    if (PL.earth) PL.earth.el.remove();
+    planetsEl.appendChild(el);
+    PL.earth = { el, side, cx: ex, cy: ey, depth: 32, key, r: er, ox: 0, oy: 0 };
+  }
+  refreshEarth();
+  if (!PL.moon || PL.moon.key !== key) {
+    const r = m * 0.026, side = 2 * r / 0.8;
+    const res = Math.max(64, Math.round(Math.min(220, side * dpr * 1.5)));
+    const cv = renderPlanet(SPEC_MOON, res, lightFor(ex, ey));
+    cv.className = "pl";
+    cv.style.width = side + "px"; cv.style.height = side + "px";
+    if (PL.moon) PL.moon.el.remove();
+    planetsEl.appendChild(cv);
+    PL.moon = { el: cv, side, cx: ex, cy: ey, depth: 40, key, r, ox: 0, oy: 0 };
+  }
+}
+let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(layoutScene, 250); });
+setTimeout(layoutScene, 40);
+setInterval(refreshEarth, 60000);
 
 /* ---------- OROLOGIO ---------- */
 function tick() {
@@ -582,25 +821,26 @@ function tick() {
 setInterval(tick, 1000); tick();
 
 /* ---------- PANNELLI ---------- */
-function openPanel(title, html) {
+let curPanel = "";
+function openPanel(title, html, id) {
+  curPanel = id || "";
   $("ptitle").textContent = title;
   $("pbody").innerHTML = html;
   $("overlay").style.display = "flex";
 }
-function closePanel() { $("overlay").style.display = "none"; $("pbody").innerHTML = ""; }
+function closePanel() { curPanel = ""; $("overlay").style.display = "none"; $("pbody").innerHTML = ""; }
 $("pclose").onclick = closePanel;
 $("overlay").addEventListener("click", e => { if (e.target === $("overlay")) closePanel(); });
 
-/* Voce */
-$("satV").onclick = () => {
-  const vs = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-  const isIt = v => v.lang && v.lang.toLowerCase().startsWith("it");
-  const it = vs.filter(isIt), other = vs.filter(v => !isIt(v));
-  const cur = voiceCfg.name || (it[0] && it[0].name) || "";
-  const opt = v => `<option value="${esc(v.name)}" ${v.name === cur ? "selected" : ""}>${esc(v.name)} (${esc(v.lang)})</option>`;
+/* Voce (solo italiano) */
+function showVoice() {
+  const it = itVoices();
+  const cur = it.some(v => v.name === voiceCfg.name) ? voiceCfg.name : (it[0] ? it[0].name : "");
+  const sel = it.length
+    ? `<label>VOCE ITALIANA DI JARVIS</label><select id="vsel">${it.map(v => `<option value="${esc(v.name)}" ${v.name === cur ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`
+    : `<div class="sub">Nessuna voce italiana trovata su questo dispositivo.<br>Scaricala da Impostazioni → Accessibilità → Contenuto letto → Voci → Italiano, poi riapri questo pannello.</div>`;
   openPanel("VOCE", `
-    <label>VOCE DI JARVIS</label>
-    <select id="vsel">${it.map(opt).join("")}${other.length ? `<optgroup label="Altre lingue">${other.map(opt).join("")}</optgroup>` : ""}</select>
+    ${sel}
     <label>VELOCITÀ: <span id="vrv">${voiceCfg.rate}</span></label>
     <input type="range" id="vrate" min="0.5" max="1.5" step="0.05" value="${voiceCfg.rate}">
     <label>TONO: <span id="vpv">${voiceCfg.pitch}</span></label>
@@ -611,8 +851,8 @@ $("satV").onclick = () => {
       <button data-p="0.9,0.7">Profonda</button>
       <button data-p="1.25,1.1">Veloce</button>
     </div>
-    <div class="hint">Per voci più naturali: Impostazioni iPad → Accessibilità → Contenuto letto → Voci, scarica una voce italiana migliorata e riapri questo pannello.</div>`);
-  $("vsel").onchange = e => { voiceCfg.name = e.target.value; saveVoice(); };
+    <div class="hint">Per voci più naturali scarica la versione "Avanzata" o "Premium" di una voce italiana da Impostazioni → Accessibilità → Contenuto letto → Voci.</div>`, "voce");
+  if ($("vsel")) $("vsel").onchange = e => { voiceCfg.name = e.target.value; saveVoice(); };
   $("vrate").oninput = e => { voiceCfg.rate = Number(e.target.value); $("vrv").textContent = voiceCfg.rate; saveVoice(); };
   $("vpitch").oninput = e => { voiceCfg.pitch = Number(e.target.value); $("vpv").textContent = voiceCfg.pitch; saveVoice(); };
   $("vtest").onclick = () => speak("Buonasera, sono Jarvis. Questa è la mia voce.");
@@ -622,7 +862,9 @@ $("satV").onclick = () => {
     $("vrate").value = r; $("vpitch").value = p; $("vrv").textContent = r; $("vpv").textContent = p;
     speak("Voce aggiornata.");
   });
-};
+}
+$("satV").onclick = showVoice;
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { if (curPanel === "voce") showVoice(); };
 
 /* Orario */
 $("satT").onclick = () => {
@@ -632,7 +874,7 @@ $("satT").onclick = () => {
     <div class="big" id="bigTime">--:--:--</div>
     <div class="sub">${esc(new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }))}<br>${esc(tz)}</div>
     ${zones.map(z => `<div class="wc"><span>${z[0]}</span><span data-tz="${z[1]}">--:--</span></div>`).join("")}
-    <div class="row"><button id="tsay">🔊 Dimmi l'ora</button></div>`);
+    <div class="row"><button id="tsay">🔊 Dimmi l'ora</button></div>`, "ora");
   $("tsay").onclick = () => {
     const d = new Date();
     speak("Sono le " + d.getHours() + " e " + String(d.getMinutes()).padStart(2, "0") + ".");
@@ -681,7 +923,7 @@ async function loadWeather() {
     days: j.daily.time.map((t, i) => ({ date: t, code: j.daily.weather_code[i], max: j.daily.temperature_2m_max[i], min: j.daily.temperature_2m_min[i], rain: j.daily.precipitation_probability_max[i] }))
   };
   $("satMi").textContent = Math.round(WX.temp) + "°";
-  drawScene();
+  refreshEarth();
 }
 function weatherHtml() {
   const w = WX, c = wcode(w.code, w.isDay);
@@ -701,8 +943,8 @@ function bindWeather() {
   };
 }
 async function showWeather(force) {
-  if (WX && !force) { openPanel("METEO", weatherHtml()); bindWeather(); return; }
-  openPanel("METEO", `<div class="sub">Rilevo la posizione…</div>`);
+  if (WX && !force) { openPanel("METEO", weatherHtml(), "meteo"); bindWeather(); return; }
+  openPanel("METEO", `<div class="sub">Rilevo la posizione…</div>`, "meteo");
   try {
     await loadWeather();
     $("pbody").innerHTML = weatherHtml(); bindWeather();
