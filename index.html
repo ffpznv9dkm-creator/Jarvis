@@ -44,4 +44,633 @@
   .r2 { stroke-width: 3; stroke-dasharray: 60 20 10 20; animation: spin calc(14s * var(--spd)) linear infinite reverse; }
   .r3 { stroke-width: 1.5; stroke-dasharray: 90 30; animation: spin calc(22s * var(--spd)) linear infinite; }
   .r4 { stroke-width: 5; stroke-dasharray: 30 24; opacity: .8; animation: spin calc(9s * var(--spd)) linear infinite reverse; }
-  .core { animation: pulse calc(3s * var(--spd)) ease-in-out infinite; transform-box: view-box; transform-origin: 50% 
+  .core { animation: pulse calc(3s * var(--spd)) ease-in-out infinite; transform-box: view-box; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform: scale(.94); opacity: .8; } 50% { transform: scale(1.06); opacity: 1; } }
+  #status { position: absolute; top: 0; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: 5px;
+    color: var(--c); text-shadow: 0 0 8px var(--c); transition: color .4s; z-index: 3; }
+
+  .sat { position: absolute; width: 66px; height: 66px; border-radius: 50%; padding: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: 19px; line-height: 1.1;
+    background: radial-gradient(circle, rgba(14,60,84,.85), rgba(4,16,26,.92)); border: 1.5px solid var(--c); box-shadow: 0 0 14px var(--c2); z-index: 4; }
+  .sat small { font-size: 9px; letter-spacing: 1.5px; opacity: .85; }
+  .sat::before { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 1px dashed var(--c); opacity: .6; animation: spin 14s linear infinite; }
+  .sat::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c);
+    top: -10px; left: 30px; transform-origin: 3px 43px; animation: spin 7s linear infinite; }
+  #satV { left: 12%; top: calc(50% - 70px); }
+  #satM { right: 12%; top: calc(50% - 70px); }
+  #satT { left: 50%; bottom: 6px; margin-left: -33px; }
+
+  #chat { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 12px; z-index: 2; -webkit-overflow-scrolling: touch; position: relative; }
+  .msg { max-width: 82%; margin: 8px 0; padding: 10px 14px; line-height: 1.45; white-space: pre-wrap; font-size: 16px; }
+  .bot { background: linear-gradient(135deg, rgba(8,30,46,.88), rgba(5,16,26,.88)); border: 1px solid var(--c2); border-left: 3px solid var(--c); border-radius: 4px 14px 14px 14px; }
+  .user { margin-left: auto; text-align: right; background: rgba(14,60,84,.6); border: 1px solid var(--c2); border-right: 3px solid var(--c); border-radius: 14px 4px 14px 14px; }
+
+  #bar { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--c2); background: rgba(2,10,16,.88); z-index: 5; position: relative; }
+  #text { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; outline: none; }
+  #text:focus { border-color: var(--c); box-shadow: 0 0 10px var(--c2); }
+  #mic.on { background: var(--c); color: var(--bg); box-shadow: 0 0 16px var(--c); }
+
+  #overlay { position: fixed; inset: 0; background: rgba(0,5,10,.62); display: none; align-items: center; justify-content: center; z-index: 30; }
+  #panel { width: min(92vw, 520px); max-height: 82vh; overflow: auto; border: 1px solid var(--c); border-radius: 16px;
+    background: rgba(4,16,26,.96); box-shadow: 0 0 30px var(--c2); padding: 18px; }
+  .phead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  #ptitle { letter-spacing: 5px; color: var(--c); font-size: 15px; }
+  #pclose { padding: 6px 12px; }
+  #panel label { display: block; font-size: 12px; letter-spacing: 2px; color: var(--c); margin: 12px 0 6px; opacity: .85; }
+  #panel select { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; }
+  #panel input[type=range] { width: 100%; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .row button { padding: 9px 14px; font-size: 14px; }
+  .big { font-size: 54px; text-align: center; color: var(--c); text-shadow: 0 0 16px var(--c); font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+  .sub { text-align: center; opacity: .8; margin-bottom: 10px; }
+  .wc { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--c2); font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12px; opacity: .65; margin-top: 10px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<header>
+  <div class="brand">JARVIS</div>
+  <button id="gear">⚙︎</button>
+</header>
+
+<div id="settings">
+  Chiave API Gemini:
+  <input id="key" type="password" placeholder="Incolla qui la chiave (vuoto = non cambiare)">
+  Modello:
+  <input id="model" type="text">
+  <button id="save">Salva</button>
+</div>
+
+<div id="hud">
+  <div id="status">SISTEMI IN AVVIO</div>
+  <div id="eyewrap">
+    <svg id="eyesvg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="coreGrad">
+          <stop id="g0" offset="0%" stop-color="#9eeaff"/>
+          <stop id="g1" offset="60%" stop-color="#0a7fa6" stop-opacity=".5"/>
+          <stop offset="100%" stop-color="#0a5f80" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="sclera">
+          <stop offset="0%" stop-color="#f6f9fb"/>
+          <stop offset="70%" stop-color="#dfe7ee"/>
+          <stop offset="100%" stop-color="#b79a9a"/>
+        </radialGradient>
+        <radialGradient id="irisG">
+          <stop id="i0" offset="0%" stop-color="#0b3a4a"/>
+          <stop id="i1" offset="42%" stop-color="#5fe0ff"/>
+          <stop id="i2" offset="82%" stop-color="#1590b5"/>
+          <stop id="i3" offset="100%" stop-color="#03141b"/>
+        </radialGradient>
+        <clipPath id="eyeClip"><path d="M58,100 Q100,60 142,100 Q100,140 58,100 Z"/></clipPath>
+        <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>
+      </defs>
+      <circle class="ring r1" cx="100" cy="100" r="96"/>
+      <circle class="ring r2" cx="100" cy="100" r="84"/>
+      <circle class="ring r3" cx="100" cy="100" r="70"/>
+      <circle class="ring r4" cx="100" cy="100" r="56"/>
+      <circle class="core" cx="100" cy="100" r="46" fill="url(#coreGrad)"/>
+
+      <g clip-path="url(#eyeClip)">
+        <rect x="56" y="58" width="88" height="84" fill="url(#sclera)"/>
+        <path d="M60,100 L76,97 M62,103 L80,104 M140,100 L124,98 M138,104 L122,103" stroke="#b33" stroke-width=".6" opacity=".35" fill="none"/>
+        <g id="gaze">
+          <circle cx="100" cy="100" r="17" fill="url(#irisG)"/>
+          <circle cx="100" cy="100" r="14" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="0.8 2.2" opacity=".22"/>
+          <circle cx="100" cy="100" r="10" fill="none" stroke="#000" stroke-width="3" stroke-dasharray="0.7 1.9" opacity=".28"/>
+          <circle cx="100" cy="100" r="17" fill="none" stroke="#000" stroke-width="2.2" opacity=".75"/>
+          <circle id="pupil" cx="100" cy="100" r="7" fill="#000"/>
+        </g>
+        <ellipse cx="93" cy="92" rx="5" ry="3" fill="#fff" opacity=".85" transform="rotate(-25 93 92)"/>
+        <circle cx="109" cy="108" r="1.8" fill="#fff" opacity=".55"/>
+        <path d="M58,100 Q100,60 142,100 Q100,140 58,100 Z" fill="none" stroke="#000" stroke-width="9" opacity=".55" filter="url(#soft)"/>
+        <path id="lidU" fill="#04101a"/>
+        <path id="lidL" fill="#04101a"/>
+      </g>
+      <path id="edgeU" fill="none" stroke="var(--c)" stroke-width="1.6" stroke-linecap="round"/>
+      <path id="edgeL" fill="none" stroke="var(--c)" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <button class="sat" id="satV"><span>🔊</span><small>VOCE</small></button>
+  <button class="sat" id="satM"><span id="satMi">🌤️</span><small>METEO</small></button>
+  <button class="sat" id="satT"><span id="satTi" style="font-size:17px">--:--</span><small>ORA</small></button>
+</div>
+
+<div id="chat"></div>
+
+<div id="bar">
+  <button id="mic">🎤</button>
+  <input id="text" type="text" placeholder="Scrivi o tocca il microfono…">
+  <button id="send">Invia</button>
+</div>
+
+<div id="overlay"><div id="panel">
+  <div class="phead"><div id="ptitle"></div><button id="pclose">✕</button></div>
+  <div id="pbody"></div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SYSTEM = "Sei Jarvis, un assistente personale elegante, efficiente e cortese, in stile maggiordomo high-tech. Rispondi sempre in italiano, in modo breve e chiaro (massimo 3-4 frasi, salvo richiesta diversa). Non usare elenchi puntati né asterischi: le tue risposte vengono lette ad alta voce.";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+let history = [];
+let listening = false, thinking = false, speaking = false;
+let WX = null;
+
+$("model").value = store.get("jarvis_model", DEFAULT_MODEL);
+if (!store.get("jarvis_key", "")) $("settings").style.display = "block";
+
+/* ---------- STATO ---------- */
+function setState() {
+  document.body.classList.toggle("listening", listening);
+  document.body.classList.toggle("thinking", thinking);
+  document.body.classList.toggle("speaking", speaking);
+  $("status").textContent = listening ? "TI ASCOLTO…" : thinking ? "ELABORO…" : speaking ? "PARLO…" : "IN ATTESA";
+}
+
+/* ---------- IMPOSTAZIONI ---------- */
+$("gear").onclick = () => { $("settings").style.display = $("settings").style.display === "block" ? "none" : "block"; };
+$("save").onclick = () => {
+  if ($("key").value.trim()) store.set("jarvis_key", $("key").value.trim());
+  store.set("jarvis_model", $("model").value.trim() || DEFAULT_MODEL);
+  $("key").value = "";
+  $("settings").style.display = "none";
+  addMsg("Impostazioni salvate.", "bot");
+};
+
+/* ---------- CHAT ---------- */
+function addMsg(text, who) {
+  const d = document.createElement("div");
+  d.className = "msg " + who;
+  d.textContent = text;
+  $("chat").appendChild(d);
+  $("chat").scrollTop = $("chat").scrollHeight;
+  return d;
+}
+
+/* ---------- VOCE ---------- */
+let voiceCfg = { name: "", rate: 1, pitch: 1 };
+try { Object.assign(voiceCfg, JSON.parse(store.get("jarvis_voice", "{}"))); } catch (e) {}
+function saveVoice() { store.set("jarvis_voice", JSON.stringify(voiceCfg)); }
+if (window.speechSynthesis) speechSynthesis.getVoices();
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(String(text).replace(/[*_#`]/g, ""));
+  u.lang = "it-IT";
+  const vs = speechSynthesis.getVoices();
+  const v = vs.find(v => v.name === voiceCfg.name) || vs.find(v => v.lang && v.lang.toLowerCase().startsWith("it"));
+  if (v) u.voice = v;
+  u.rate = Number(voiceCfg.rate) || 1;
+  u.pitch = Number(voiceCfg.pitch) || 1;
+  u.onstart = () => { speaking = true; setState(); };
+  u.onend = u.onerror = () => { speaking = false; setState(); };
+  speechSynthesis.speak(u);
+}
+
+/* ---------- GEMINI ---------- */
+function sysPrompt() {
+  const now = new Date().toLocaleString("it-IT", { dateStyle: "full", timeStyle: "short" });
+  let s = SYSTEM + " Data e ora attuali dell'utente: " + now + ".";
+  if (WX) s += " Meteo attuale" + (WX.city ? " a " + WX.city : "") + ": " + Math.round(WX.temp) + " gradi, " + wcode(WX.code, WX.isDay).t + ".";
+  return s;
+}
+
+async function ask(text) {
+  const key = store.get("jarvis_key", "");
+  if (!key) { $("settings").style.display = "block"; addMsg("Inserisci prima la chiave API nelle impostazioni.", "bot"); return; }
+  const model = store.get("jarvis_model", DEFAULT_MODEL);
+  addMsg(text, "user");
+  history.push({ role: "user", parts: [{ text }] });
+  const wait = addMsg("…", "bot");
+  thinking = true; setState();
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: sysPrompt() }] }, contents: history.slice(-20) })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error((data.error && data.error.message) || "Errore " + r.status);
+    const answer = data.candidates[0].content.parts.map(p => p.text || "").join("");
+    history.push({ role: "model", parts: [{ text: answer }] });
+    wait.textContent = answer;
+    thinking = false; setState();
+    speak(answer);
+  } catch (e) {
+    history.pop();
+    wait.textContent = "Errore: " + e.message;
+    thinking = false; setState();
+  }
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
+
+function send() {
+  const t = $("text").value.trim();
+  if (!t) return;
+  $("text").value = "";
+  ask(t);
+}
+$("send").onclick = send;
+$("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+$("mic").onclick = () => {
+  if (window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+  if (!SR) { addMsg("Il riconoscimento vocale non è disponibile. Usa il microfono della tastiera dell'iPad.", "bot"); return; }
+  if (listening) { rec.stop(); return; }
+  rec = new SR();
+  rec.lang = "it-IT";
+  rec.interimResults = false;
+  rec.onstart = () => { listening = true; $("mic").classList.add("on"); setState(); };
+  rec.onend = () => { listening = false; $("mic").classList.remove("on"); setState(); };
+  rec.onerror = e => addMsg("Errore microfono: " + e.error, "bot");
+  rec.onresult = e => ask(e.results[0][0].transcript);
+  rec.start();
+};
+
+/* ---------- OCCHIO ---------- */
+const HUES = [190, 125, 40, 0, 275, 330, 215];
+let hueNow = 190;
+function setHue(h) {
+  hueNow = h;
+  const set = (id, c) => $(id).setAttribute("stop-color", c);
+  set("i0", `hsl(${h},85%,22%)`); set("i1", `hsl(${h},95%,62%)`);
+  set("i2", `hsl(${h},90%,42%)`); set("i3", `hsl(${h},90%,10%)`);
+  set("g0", `hsl(${h},100%,72%)`); set("g1", `hsl(${h},100%,40%)`);
+}
+setHue(190);
+
+const eye = { gx: 0, gy: 0, tx: 0, ty: 0, o: 1, blinking: false, bt: 0, changed: false, next: performance.now() + 2500, nextLook: 0, mouse: false, mouseT: 0 };
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+window.addEventListener("pointermove", e => {
+  const r = $("eyesvg").getBoundingClientRect();
+  const dx = (e.clientX - (r.left + r.width / 2)) / (window.innerWidth / 2);
+  const dy = (e.clientY - (r.top + r.height / 2)) / (window.innerHeight / 2);
+  eye.tx = clamp(dx * 24, -22, 22); eye.ty = clamp(dy * 10, -8, 8);
+  eye.mouse = true; eye.mouseT = performance.now();
+});
+
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(50, t - lastT); lastT = t;
+  if (t > eye.nextLook) {
+    if (!eye.mouse || t > eye.mouseT + 2500) {
+      eye.mouse = false;
+      eye.tx = (Math.random() * 2 - 1) * 20;
+      eye.ty = (Math.random() * 2 - 1) * 7;
+    }
+    eye.nextLook = t + 500 + Math.random() * 1800;
+  }
+  const k = Math.min(1, dt * 0.02);
+  eye.gx += (eye.tx - eye.gx) * k;
+  eye.gy += (eye.ty - eye.gy) * k;
+
+  if (!eye.blinking && t > eye.next) { eye.blinking = true; eye.bt = 0; eye.changed = false; }
+  if (eye.blinking) {
+    eye.bt += dt / 260;
+    if (eye.bt >= 0.5 && !eye.changed) {
+      eye.changed = true;
+      let h; do { h = HUES[Math.floor(Math.random() * HUES.length)]; } while (h === hueNow);
+      setHue(h);
+    }
+    if (eye.bt >= 1) {
+      eye.blinking = false; eye.o = 1;
+      eye.next = t + (Math.random() < 0.2 ? 250 : 2200 + Math.random() * 3800);
+    } else eye.o = 1 - Math.sin(Math.PI * eye.bt);
+  }
+
+  const base = thinking ? 4.5 : listening ? 9.5 : 7;
+  $("pupil").setAttribute("r", (base + Math.sin(t / 900) * 0.5).toFixed(2));
+  $("gaze").setAttribute("transform", `translate(${eye.gx.toFixed(2)} ${eye.gy.toFixed(2)})`);
+
+  const cu = 100 - 40 * eye.o, cl = 100 + 40 * eye.o;
+  $("lidU").setAttribute("d", `M58,100 Q100,${cu} 142,100 L142,40 L58,40 Z`);
+  $("lidL").setAttribute("d", `M58,100 Q100,${cl} 142,100 L142,160 L58,160 Z`);
+  $("edgeU").setAttribute("d", `M58,100 Q100,${cu} 142,100`);
+  $("edgeL").setAttribute("d", `M58,100 Q100,${cl} 142,100`);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- SFONDO: PIANETI E TERRA ---------- */
+const POLYS = [
+  [[-166,68],[-156,71],[-140,70],[-125,70],[-110,68],[-95,72],[-85,69],[-82,64],[-94,59],[-90,52],[-82,52],[-79,57],[-77,60],[-70,60],[-62,58],[-56,52],[-66,45],[-70,43],[-74,40],[-76,35],[-81,31],[-80,26],[-82,29],[-86,30],[-90,29],[-94,29],[-97,26],[-97,22],[-95,19],[-91,19],[-90,21],[-87,21],[-88,16],[-84,15],[-83,10],[-80,8],[-78,9],[-82,8],[-86,11],[-92,14],[-97,16],[-105,20],[-109,26],[-114,31],[-117,33],[-121,35],[-124,40],[-124,47],[-128,51],[-134,57],[-141,60],[-150,60],[-158,57],[-165,55],[-160,59],[-166,62]],
+  [[-73,78],[-60,82],[-30,83],[-20,80],[-20,70],[-30,68],[-43,60],[-50,64],[-55,70],[-68,76]],
+  [[-77,8],[-72,12],[-63,10],[-52,5],[-50,0],[-40,-3],[-35,-6],[-38,-13],[-41,-22],[-48,-26],[-53,-34],[-58,-38],[-65,-41],[-67,-46],[-69,-52],[-72,-54],[-75,-48],[-73,-38],[-71,-30],[-70,-18],[-76,-14],[-81,-6],[-80,-1],[-78,3]],
+  [[-17,21],[-13,28],[-6,35],[10,37],[11,33],[20,31],[32,31],[34,28],[38,20],[43,12],[51,12],[47,5],[40,-3],[40,-15],[35,-24],[32,-29],[27,-34],[20,-35],[17,-30],[12,-18],[13,-8],[9,-1],[9,4],[4,6],[-5,5],[-12,7],[-17,13]],
+  [[-9,37],[-9,43],[-1,46],[-4,48],[2,51],[8,54],[8,57],[10,57],[12,54],[20,55],[24,59],[30,60],[22,60],[22,65],[18,63],[17,60],[12,56],[6,58],[5,62],[14,68],[25,71],[40,67],[44,68],[60,69],[70,73],[80,73],[100,77],[113,74],[130,71],[150,71],[170,70],[180,68],[180,65],[165,60],[163,57],[156,51],[155,59],[142,59],[135,54],[141,52],[140,48],[132,43],[129,41],[126,37],[126,40],[121,40],[122,37],[119,35],[122,30],[120,25],[110,21],[108,17],[106,10],[104,9],[100,13],[100,7],[103,1],[98,8],[98,16],[94,17],[90,22],[87,21],[80,15],[78,8],[73,17],[72,21],[67,24],[57,26],[51,28],[48,30],[50,26],[56,26],[59,22],[52,16],[43,13],[39,21],[35,28],[34,31],[36,36],[28,37],[26,40],[23,40],[22,37],[19,40],[14,45],[13,44],[16,41],[18,40],[16,38],[12,41],[10,44],[3,43],[-1,38]],
+  [[114,-22],[122,-18],[130,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[141,-38],[135,-34],[130,-32],[115,-34],[113,-26]],
+  [[-5,50],[1,51],[2,53],[-2,57],[-5,58],[-6,56],[-3,54],[-5,52]],
+  [[130,31],[135,34],[140,35],[142,39],[141,43],[145,44],[141,45],[139,40],[136,37],[132,35]],
+  [[109,1],[117,7],[119,1],[116,-4],[110,-3]],
+  [[95,5],[104,-2],[106,-6],[101,-3]],
+  [[44,-25],[50,-15],[49,-12],[44,-17]]
+];
+function inPoly(lon, lat, poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) c = !c;
+  }
+  return c;
+}
+let LAND = null;
+function buildLand() {
+  LAND = new Uint8Array(180 * 90);
+  for (let iy = 0; iy < 90; iy++) {
+    const lat = 90 - iy * 2 - 1;
+    for (let ix = 0; ix < 180; ix++) {
+      const lon = ix * 2 - 180 + 1;
+      let l = lat < -67;
+      if (!l) for (const p of POLYS) { if (inPoly(lon, lat, p)) { l = true; break; } }
+      LAND[iy * 180 + ix] = l ? 1 : 0;
+    }
+  }
+}
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+function renderEarth(size, lon0, lat0) {
+  if (!LAND) buildLand();
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = size;
+  const cx = cv.getContext("2d");
+  const img = cx.createImageData(size, size);
+  const d = img.data;
+  const now = new Date();
+  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const doy = (now - Date.UTC(now.getUTCFullYear(), 0, 0)) / 86400000;
+  const dec = 23.44 * Math.sin(2 * Math.PI * (doy - 81) / 365) * Math.PI / 180;
+  const lons = -(utcH - 12) * 15 * Math.PI / 180;
+  const sinD = Math.sin(dec), cosD = Math.cos(dec);
+  const p0 = lat0 * Math.PI / 180, l0 = lon0 * Math.PI / 180;
+  const sp = Math.sin(p0), cp = Math.cos(p0);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x + 0.5) / size * 2 - 1, ny = 1 - (y + 0.5) / size * 2;
+      const rho = Math.hypot(nx, ny);
+      if (rho >= 1) continue;
+      const c = Math.asin(rho), sc = Math.sin(c), cc = Math.cos(c);
+      let phi, lam;
+      if (rho < 1e-6) { phi = p0; lam = l0; }
+      else {
+        phi = Math.asin(clamp(cc * sp + ny * sc * cp / rho, -1, 1));
+        lam = l0 + Math.atan2(nx * sc, rho * cp * cc - ny * sp * sc);
+      }
+      const latD = phi * 180 / Math.PI;
+      let lonD = lam * 180 / Math.PI; lonD = ((lonD + 540) % 360) - 180;
+      const ix = Math.min(179, Math.floor((lonD + 180) / 2));
+      const iy = clamp(Math.floor((90 - latD) / 2), 0, 89);
+      const land = LAND[iy * 180 + ix];
+      const dot = Math.sin(phi) * sinD + Math.cos(phi) * cosD * Math.cos(lam - lons);
+      const f = smooth(-0.1, 0.2, dot);
+      const lit = (0.55 + 0.45 * Math.max(dot, 0)) * (0.65 + 0.35 * cc);
+      const al = Math.abs(latD);
+      let dr, dg, db, nr, ng, nb;
+      if (land) {
+        if (al > 68) { dr = 236; dg = 246; db = 250; }
+        else if (al < 18) { dr = 38; dg = 120; db = 60; }
+        else if (al < 33) { dr = 178; dg = 152; db = 98; }
+        else { dr = 62; dg = 132; db = 72; }
+        nr = 14; ng = 28; nb = 30;
+      } else { dr = 22; dg = 90; db = 172; nr = 4; ng = 10; nb = 26; }
+      const i = (y * size + x) * 4;
+      d[i] = nr + (dr * lit - nr) * f;
+      d[i + 1] = ng + (dg * lit - ng) * f;
+      d[i + 2] = nb + (db * lit - nb) * f;
+      d[i + 3] = clamp((1 - rho) * size * 0.5, 0, 1) * 255;
+    }
+  }
+  cx.putImageData(img, 0, 0);
+  return cv;
+}
+
+const bg = $("bg"), bctx = bg.getContext("2d");
+function shade(x, y, r) {
+  const g = bctx.createRadialGradient(x - r * .4, y - r * .4, r * .1, x, y, r * 1.05);
+  g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(.6, "rgba(0,0,0,.25)"); g.addColorStop(1, "rgba(0,0,0,.85)");
+  bctx.fillStyle = g; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
+}
+function banded(x, y, r, cols, tilt) {
+  bctx.save(); bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.clip();
+  bctx.translate(x, y); bctx.rotate(tilt);
+  const n = cols.length;
+  for (let i = 0; i < n; i++) { bctx.fillStyle = cols[i]; bctx.fillRect(-r * 1.5, -r + i * (2 * r / n), 3 * r, 2 * r / n + 1); }
+  bctx.restore(); shade(x, y, r);
+}
+function glow(x, y, r, col) {
+  const g = bctx.createRadialGradient(x, y, r * .95, x, y, r * 1.35);
+  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
+  bctx.fillStyle = g; bctx.beginPath(); bctx.arc(x, y, r * 1.35, 0, 7); bctx.fill();
+}
+function getLoc() { try { return JSON.parse(store.get("jarvis_loc", "null")); } catch (e) { return null; } }
+
+function drawScene() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  bg.width = w * dpr; bg.height = h * dpr; bg.style.width = w + "px"; bg.style.height = h + "px";
+  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sky = bctx.createRadialGradient(w / 2, h * .25, 10, w / 2, h * .25, Math.max(w, h));
+  sky.addColorStop(0, "#0a2236"); sky.addColorStop(1, "#02070d");
+  bctx.fillStyle = sky; bctx.fillRect(0, 0, w, h);
+  let s = 12345; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 260; i++) {
+    const x = rnd() * w, y = rnd() * h, r = rnd() * 1.3 + .2, a = rnd() * .7 + .2;
+    bctx.fillStyle = `rgba(200,235,255,${a})`; bctx.beginPath(); bctx.arc(x, y, r, 0, 7); bctx.fill();
+  }
+  const m = Math.min(w, h);
+  // gigante gassoso
+  glow(w * .9, h * .2, m * .1, "rgba(255,170,90,.25)");
+  banded(w * .9, h * .2, m * .1, ["#c98b5a", "#e6b98a", "#a5683f", "#d9a673", "#b57a4b", "#e8c79c", "#9b5f3a"], -0.15);
+  // pianeta rosso
+  glow(w * .06, h * .72, m * .06, "rgba(255,80,50,.25)");
+  banded(w * .06, h * .72, m * .06, ["#a33c25", "#c4573a", "#8e2f1d", "#b8482f"], 0.3);
+  // pianeta ad anelli
+  const rx = w * .93, ry = h * .62, rr = m * .06;
+  bctx.save(); bctx.strokeStyle = "rgba(220,200,160,.55)"; bctx.lineWidth = rr * .28;
+  bctx.beginPath(); bctx.ellipse(rx, ry, rr * 1.9, rr * .5, -0.4, Math.PI, 2 * Math.PI); bctx.stroke(); bctx.restore();
+  banded(rx, ry, rr, ["#d8c48c", "#c2ab70", "#e4d4a2", "#b9a265"], -0.4);
+  bctx.save(); bctx.strokeStyle = "rgba(235,215,170,.8)"; bctx.lineWidth = rr * .28;
+  bctx.beginPath(); bctx.ellipse(rx, ry, rr * 1.9, rr * .5, -0.4, 0, Math.PI); bctx.stroke(); bctx.restore();
+  // Terra
+  const er = m * 0.15;
+  const ex = Math.max(er * 1.15, w * .11), ey = Math.max(er * 1.2, h * .25);
+  const loc = getLoc();
+  const lon0 = loc ? loc.lon : 12.5;
+  const lat0 = loc ? clamp(loc.lat * 0.5 + 10, -30, 50) : 25;
+  glow(ex, ey, er, "rgba(90,170,255,.5)");
+  bctx.drawImage(renderEarth(240, lon0, lat0), ex - er, ey - er, 2 * er, 2 * er);
+  // luna
+  banded(ex + er * 1.6, ey - er * .8, m * .022, ["#b9b9b9", "#9d9d9d", "#c8c8c8"], 0.5);
+}
+let rsz; window.addEventListener("resize", () => { clearTimeout(rsz); rsz = setTimeout(drawScene, 200); });
+drawScene();
+setInterval(drawScene, 60000);
+
+/* ---------- OROLOGIO ---------- */
+function tick() {
+  const d = new Date();
+  $("satTi").textContent = d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const big = $("bigTime");
+  if (big) {
+    big.textContent = d.toLocaleTimeString("it-IT");
+    document.querySelectorAll("[data-tz]").forEach(el => {
+      el.textContent = d.toLocaleTimeString("it-IT", { timeZone: el.dataset.tz, hour: "2-digit", minute: "2-digit" });
+    });
+  }
+}
+setInterval(tick, 1000); tick();
+
+/* ---------- PANNELLI ---------- */
+function openPanel(title, html) {
+  $("ptitle").textContent = title;
+  $("pbody").innerHTML = html;
+  $("overlay").style.display = "flex";
+}
+function closePanel() { $("overlay").style.display = "none"; $("pbody").innerHTML = ""; }
+$("pclose").onclick = closePanel;
+$("overlay").addEventListener("click", e => { if (e.target === $("overlay")) closePanel(); });
+
+/* Voce */
+$("satV").onclick = () => {
+  const vs = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  const isIt = v => v.lang && v.lang.toLowerCase().startsWith("it");
+  const it = vs.filter(isIt), other = vs.filter(v => !isIt(v));
+  const cur = voiceCfg.name || (it[0] && it[0].name) || "";
+  const opt = v => `<option value="${esc(v.name)}" ${v.name === cur ? "selected" : ""}>${esc(v.name)} (${esc(v.lang)})</option>`;
+  openPanel("VOCE", `
+    <label>VOCE DI JARVIS</label>
+    <select id="vsel">${it.map(opt).join("")}${other.length ? `<optgroup label="Altre lingue">${other.map(opt).join("")}</optgroup>` : ""}</select>
+    <label>VELOCITÀ: <span id="vrv">${voiceCfg.rate}</span></label>
+    <input type="range" id="vrate" min="0.5" max="1.5" step="0.05" value="${voiceCfg.rate}">
+    <label>TONO: <span id="vpv">${voiceCfg.pitch}</span></label>
+    <input type="range" id="vpitch" min="0.5" max="1.5" step="0.05" value="${voiceCfg.pitch}">
+    <div class="row">
+      <button id="vtest">▶ Prova voce</button>
+      <button data-p="1,1">Classica</button>
+      <button data-p="0.9,0.7">Profonda</button>
+      <button data-p="1.25,1.1">Veloce</button>
+    </div>
+    <div class="hint">Per voci più naturali: Impostazioni iPad → Accessibilità → Contenuto letto → Voci, scarica una voce italiana migliorata e riapri questo pannello.</div>`);
+  $("vsel").onchange = e => { voiceCfg.name = e.target.value; saveVoice(); };
+  $("vrate").oninput = e => { voiceCfg.rate = Number(e.target.value); $("vrv").textContent = voiceCfg.rate; saveVoice(); };
+  $("vpitch").oninput = e => { voiceCfg.pitch = Number(e.target.value); $("vpv").textContent = voiceCfg.pitch; saveVoice(); };
+  $("vtest").onclick = () => speak("Buonasera, sono Jarvis. Questa è la mia voce.");
+  document.querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
+    const [r, p] = b.dataset.p.split(",").map(Number);
+    voiceCfg.rate = r; voiceCfg.pitch = p; saveVoice();
+    $("vrate").value = r; $("vpitch").value = p; $("vrv").textContent = r; $("vpv").textContent = p;
+    speak("Voce aggiornata.");
+  });
+};
+
+/* Orario */
+$("satT").onclick = () => {
+  const zones = [["Los Angeles", "America/Los_Angeles"], ["New York", "America/New_York"], ["Londra", "Europe/London"], ["Dubai", "Asia/Dubai"], ["Tokyo", "Asia/Tokyo"], ["Sydney", "Australia/Sydney"]];
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  openPanel("ORARIO", `
+    <div class="big" id="bigTime">--:--:--</div>
+    <div class="sub">${esc(new Date().toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }))}<br>${esc(tz)}</div>
+    ${zones.map(z => `<div class="wc"><span>${z[0]}</span><span data-tz="${z[1]}">--:--</span></div>`).join("")}
+    <div class="row"><button id="tsay">🔊 Dimmi l'ora</button></div>`);
+  $("tsay").onclick = () => {
+    const d = new Date();
+    speak("Sono le " + d.getHours() + " e " + String(d.getMinutes()).padStart(2, "0") + ".");
+  };
+  tick();
+};
+
+/* Meteo */
+function wcode(c, isDay) {
+  const day = isDay !== 0;
+  if (c === 0) return { e: day ? "☀️" : "🌙", t: "sereno" };
+  if (c === 1) return { e: day ? "🌤️" : "🌙", t: "prevalentemente sereno" };
+  if (c === 2) return { e: "⛅", t: "parzialmente nuvoloso" };
+  if (c === 3) return { e: "☁️", t: "coperto" };
+  if (c === 45 || c === 48) return { e: "🌫️", t: "nebbia" };
+  if (c >= 51 && c <= 57) return { e: "🌦️", t: "pioviggine" };
+  if (c >= 61 && c <= 67) return { e: "🌧️", t: "pioggia" };
+  if (c >= 71 && c <= 77) return { e: "❄️", t: "neve" };
+  if (c >= 80 && c <= 82) return { e: "🌦️", t: "rovesci" };
+  if (c === 85 || c === 86) return { e: "🌨️", t: "rovesci di neve" };
+  if (c >= 95) return { e: "⛈️", t: "temporale" };
+  return { e: "🌡️", t: "variabile" };
+}
+function getPos() {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error("Geolocalizzazione non disponibile"));
+    navigator.geolocation.getCurrentPosition(p => res(p.coords), e => rej(new Error(e.code === 1 ? "Permesso di posizione negato. Abilitalo in Impostazioni → Privacy → Localizzazione → Safari." : "Posizione non disponibile")), { timeout: 15000, maximumAge: 600000 });
+  });
+}
+async function loadWeather() {
+  const c = await getPos();
+  const lat = c.latitude, lon = c.longitude;
+  store.set("jarvis_loc", JSON.stringify({ lat, lon }));
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=3`;
+  const r = await fetch(url);
+  const j = await r.json();
+  if (!j.current) throw new Error("Meteo non disponibile");
+  let city = "";
+  try {
+    const g = await (await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=it`)).json();
+    city = g.city || g.locality || g.principalSubdivision || "";
+  } catch (e) {}
+  WX = {
+    city, temp: j.current.temperature_2m, feels: j.current.apparent_temperature, hum: j.current.relative_humidity_2m,
+    wind: j.current.wind_speed_10m, code: j.current.weather_code, isDay: j.current.is_day,
+    days: j.daily.time.map((t, i) => ({ date: t, code: j.daily.weather_code[i], max: j.daily.temperature_2m_max[i], min: j.daily.temperature_2m_min[i], rain: j.daily.precipitation_probability_max[i] }))
+  };
+  $("satMi").textContent = Math.round(WX.temp) + "°";
+  drawScene();
+}
+function weatherHtml() {
+  const w = WX, c = wcode(w.code, w.isDay);
+  const names = ["Oggi", "Domani", "Dopodomani"];
+  return `
+    <div class="sub">${esc(w.city || "La tua posizione")}</div>
+    <div class="big">${c.e} ${Math.round(w.temp)}°</div>
+    <div class="sub">${esc(c.t)} · percepita ${Math.round(w.feels)}° · umidità ${w.hum}% · vento ${Math.round(w.wind)} km/h</div>
+    ${w.days.map((d, i) => `<div class="wc"><span>${names[i] || d.date}</span><span>${wcode(d.code, 1).e} ${Math.round(d.min)}° / ${Math.round(d.max)}° · 💧${d.rain == null ? "-" : d.rain}%</span></div>`).join("")}
+    <div class="row"><button id="wref">↻ Aggiorna</button><button id="wsay">🔊 Leggimi il meteo</button></div>`;
+}
+function bindWeather() {
+  $("wref").onclick = () => showWeather(true);
+  $("wsay").onclick = () => {
+    const c = wcode(WX.code, WX.isDay);
+    speak((WX.city ? "A " + WX.city + " " : "") + "ci sono " + Math.round(WX.temp) + " gradi, " + c.t + ". Oggi minima " + Math.round(WX.days[0].min) + ", massima " + Math.round(WX.days[0].max) + ".");
+  };
+}
+async function showWeather(force) {
+  if (WX && !force) { openPanel("METEO", weatherHtml()); bindWeather(); return; }
+  openPanel("METEO", `<div class="sub">Rilevo la posizione…</div>`);
+  try {
+    await loadWeather();
+    $("pbody").innerHTML = weatherHtml(); bindWeather();
+  } catch (e) {
+    $("pbody").innerHTML = `<div class="sub">${esc(e.message)}</div><div class="row"><button id="wref">Riprova</button></div>`;
+    $("wref").onclick = () => showWeather(true);
+  }
+}
+$("satM").onclick = () => showWeather(false);
+
+if (navigator.permissions && navigator.permissions.query) {
+  navigator.permissions.query({ name: "geolocation" }).then(p => { if (p.state === "granted") loadWeather().catch(() => {}); }).catch(() => {});
+}
+
+/* ---------- AVVIO ---------- */
+setTimeout(() => { setState(); addMsg("Sistemi online. Buonasera, sono Jarvis. Come posso aiutarla?", "bot"); }, 1800);
+</script>
+</body>
+</html>
