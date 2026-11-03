@@ -5,34 +5,119 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Jarvis">
+<meta name="theme-color" content="#02070d">
 <title>Jarvis</title>
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; background: #050b14; color: #bfefff; font-family: -apple-system, Helvetica, sans-serif; height: 100vh; display: flex; flex-direction: column; }
-  header { padding: 16px; text-align: center; letter-spacing: 6px; font-size: 22px; color: #3fd8ff; border-bottom: 1px solid #12344a; text-shadow: 0 0 12px #3fd8ff; }
-  #chat { flex: 1; overflow-y: auto; padding: 16px; }
-  .msg { max-width: 85%; margin: 8px 0; padding: 10px 14px; border-radius: 14px; line-height: 1.4; white-space: pre-wrap; }
-  .user { margin-left: auto; background: #0e2a3d; border: 1px solid #1c5a7d; }
-  .bot { background: #08141f; border: 1px solid #12344a; }
-  #bar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #12344a; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  #text { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid #1c5a7d; background: #08141f; color: #bfefff; font-size: 16px; }
-  button { border: 1px solid #3fd8ff; background: #0a2233; color: #3fd8ff; border-radius: 12px; padding: 12px 16px; font-size: 16px; }
-  #mic.on { background: #3fd8ff; color: #050b14; }
-  #settings { display: none; padding: 16px; border-bottom: 1px solid #12344a; }
-  #settings input { width: 100%; padding: 10px; margin: 6px 0 10px; border-radius: 10px; border: 1px solid #1c5a7d; background: #08141f; color: #bfefff; font-size: 16px; }
-  #gear { position: absolute; right: 12px; top: 12px; padding: 6px 10px; }
+  :root { --c: #3fd8ff; --c2: #0e6f93; --bg: #02070d; --spd: 1; }
+  body.listening { --c: #7dffb2; --c2: #1d8a55; }
+  body.thinking { --c: #ffc95c; --c2: #8a6a1d; --spd: 0.2; }
+  body.speaking { --spd: 0.4; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      radial-gradient(ellipse at 50% 20%, #0a2236 0%, var(--bg) 70%),
+      var(--bg);
+    color: #cdf3ff; font-family: -apple-system, "Helvetica Neue", Helvetica, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden; position: relative;
+  }
+  body::before { /* griglia */
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .18;
+    background-image:
+      linear-gradient(var(--c2) 1px, transparent 1px),
+      linear-gradient(90deg, var(--c2) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 75%);
+  }
+  body::after { /* scanlines */
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .12;
+    background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, #000 3px);
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: calc(10px + env(safe-area-inset-top)) 20px 8px; z-index: 2;
+  }
+  .brand { letter-spacing: 8px; font-size: 20px; color: var(--c); text-shadow: 0 0 14px var(--c); transition: color .4s; }
+  #clock { text-align: right; font-size: 13px; letter-spacing: 2px; color: var(--c); opacity: .85; font-variant-numeric: tabular-nums; }
+  #clock small { display: block; opacity: .6; font-size: 10px; letter-spacing: 3px; }
+  #gear { background: transparent; border: 1px solid var(--c2); color: var(--c); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+
+  #hud { position: relative; height: 34vh; min-height: 190px; display: flex; align-items: center; justify-content: center; z-index: 1; }
+  #hud svg { height: 100%; max-height: 300px; aspect-ratio: 1; filter: drop-shadow(0 0 10px var(--c)); overflow: visible; }
+  .ring { fill: none; stroke: var(--c); transform-box: view-box; transform-origin: 50% 50%; transition: stroke .4s; }
+  .r1 { stroke-width: 1.2; stroke-dasharray: 2 5; animation: spin calc(40s * var(--spd)) linear infinite; }
+  .r2 { stroke-width: 3; stroke-dasharray: 60 20 10 20; animation: spin calc(14s * var(--spd)) linear infinite reverse; }
+  .r3 { stroke-width: 1.5; stroke-dasharray: 90 30; animation: spin calc(22s * var(--spd)) linear infinite; }
+  .r4 { stroke-width: 6; stroke-dasharray: 30 24; opacity: .8; animation: spin calc(9s * var(--spd)) linear infinite reverse; }
+  .hex { fill: none; stroke: var(--c); stroke-width: 1.5; transform-box: view-box; transform-origin: 50% 50%; animation: spin calc(30s * var(--spd)) linear infinite; transition: stroke .4s; }
+  .core { fill: url(#coreGrad); animation: pulse calc(3s * var(--spd)) ease-in-out infinite; transform-box: view-box; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform: scale(.92); opacity: .85; } 50% { transform: scale(1.08); opacity: 1; } }
+  #status { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 12px; letter-spacing: 5px; color: var(--c); text-shadow: 0 0 8px var(--c); transition: color .4s; }
+
+  #settings { display: none; margin: 0 16px; padding: 14px; border: 1px solid var(--c2); border-radius: 12px; background: rgba(4,16,26,.92); z-index: 3; }
+  #settings input { width: 100%; padding: 10px; margin: 6px 0 10px; border-radius: 10px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; }
+  button { border: 1px solid var(--c); background: rgba(10,34,51,.7); color: var(--c); border-radius: 12px; padding: 12px 16px; font-size: 16px; transition: all .3s; }
+  button:active { background: var(--c); color: var(--bg); }
+
+  #chat { flex: 1; overflow-y: auto; padding: 8px 16px 12px; z-index: 1; -webkit-overflow-scrolling: touch; }
+  .msg { max-width: 82%; margin: 8px 0; padding: 10px 14px; line-height: 1.45; white-space: pre-wrap; position: relative; font-size: 16px; }
+  .bot { background: linear-gradient(135deg, rgba(8,30,46,.85), rgba(5,16,26,.85)); border: 1px solid var(--c2); border-left: 3px solid var(--c); border-radius: 4px 14px 14px 14px; }
+  .user { margin-left: auto; text-align: right; background: rgba(14,60,84,.55); border: 1px solid var(--c2); border-right: 3px solid var(--c); border-radius: 14px 4px 14px 14px; }
+
+  #bar { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--c2); background: rgba(2,10,16,.85); z-index: 2; }
+  #text { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; outline: none; }
+  #text:focus { border-color: var(--c); box-shadow: 0 0 10px var(--c2); }
+  #mic.on { background: var(--c); color: var(--bg); box-shadow: 0 0 16px var(--c); }
+
+  .corner { position: fixed; width: 26px; height: 26px; border: 2px solid var(--c); opacity: .7; z-index: 4; pointer-events: none; transition: border-color .4s; }
+  .tl { top: 8px; left: 8px; border-right: 0; border-bottom: 0; }
+  .tr { top: 8px; right: 8px; border-left: 0; border-bottom: 0; }
+  .bl { bottom: 8px; left: 8px; border-right: 0; border-top: 0; }
+  .br { bottom: 8px; right: 8px; border-left: 0; border-top: 0; }
 </style>
 </head>
 <body>
-<header>JARVIS<button id="gear">⚙︎</button></header>
+<div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+
+<header>
+  <div class="brand">JARVIS</div>
+  <div style="display:flex;gap:12px;align-items:center">
+    <div id="clock">--:--:--<small>--</small></div>
+    <button id="gear">⚙︎</button>
+  </div>
+</header>
+
 <div id="settings">
   Chiave API Gemini:
-  <input id="key" type="password" placeholder="Incolla qui la chiave">
+  <input id="key" type="password" placeholder="Incolla qui la chiave (lascia vuoto per non cambiarla)">
   Modello:
   <input id="model" type="text">
   <button id="save">Salva</button>
 </div>
+
+<div id="hud">
+  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="coreGrad">
+        <stop offset="0%" stop-color="#ffffff"/>
+        <stop offset="35%" stop-color="#9eeaff"/>
+        <stop offset="100%" stop-color="#0a5f80" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle class="ring r1" cx="100" cy="100" r="96"/>
+    <circle class="ring r2" cx="100" cy="100" r="84"/>
+    <circle class="ring r3" cx="100" cy="100" r="70"/>
+    <circle class="ring r4" cx="100" cy="100" r="54"/>
+    <polygon class="hex" points="100,66 129,83 129,117 100,134 71,117 71,83"/>
+    <circle class="core" cx="100" cy="100" r="26"/>
+  </svg>
+  <div id="status">SISTEMI IN AVVIO</div>
+</div>
+
 <div id="chat"></div>
+
 <div id="bar">
   <button id="mic">🎤</button>
   <input id="text" type="text" placeholder="Scrivi o tocca il microfono…">
@@ -41,16 +126,30 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const SYSTEM = "Sei Jarvis, un assistente personale elegante, efficiente e cortese. Rispondi sempre in italiano, in modo breve e chiaro (massimo 3-4 frasi, salvo richiesta diversa). Non usare elenchi puntati né asterischi: le tue risposte vengono lette ad alta voce.";
+const SYSTEM = "Sei Jarvis, un assistente personale elegante, efficiente e cortese, in stile maggiordomo high-tech. Rispondi sempre in italiano, in modo breve e chiaro (massimo 3-4 frasi, salvo richiesta diversa). Non usare elenchi puntati né asterischi: le tue risposte vengono lette ad alta voce.";
 let history = [];
+let listening = false, thinking = false, speaking = false;
 
-$("model").value = localStorage.getItem("jarvis_model") || "gemini-2.5-flash";
+$("model").value = localStorage.getItem("jarvis_model") || "gemini-3.5-flash-lite";
 if (!localStorage.getItem("jarvis_key")) $("settings").style.display = "block";
+
+function setState() {
+  document.body.classList.toggle("listening", listening);
+  document.body.classList.toggle("thinking", thinking);
+  document.body.classList.toggle("speaking", speaking);
+  $("status").textContent = listening ? "TI ASCOLTO…" : thinking ? "ELABORO…" : speaking ? "PARLO…" : "IN ATTESA";
+}
+
+function tick() {
+  const d = new Date();
+  $("clock").innerHTML = d.toLocaleTimeString("it-IT") + "<small>" + d.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" }).toUpperCase() + "</small>";
+}
+setInterval(tick, 1000); tick();
 
 $("gear").onclick = () => { $("settings").style.display = $("settings").style.display === "block" ? "none" : "block"; };
 $("save").onclick = () => {
   if ($("key").value.trim()) localStorage.setItem("jarvis_key", $("key").value.trim());
-  localStorage.setItem("jarvis_model", $("model").value.trim() || "gemini-2.5-flash");
+  localStorage.setItem("jarvis_model", $("model").value.trim() || "gemini-3.5-flash-lite");
   $("key").value = "";
   $("settings").style.display = "none";
   addMsg("Impostazioni salvate.", "bot");
@@ -72,16 +171,19 @@ function speak(text) {
   u.lang = "it-IT";
   const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith("it"));
   if (v) u.voice = v;
+  u.onstart = () => { speaking = true; setState(); };
+  u.onend = u.onerror = () => { speaking = false; setState(); };
   speechSynthesis.speak(u);
 }
 
 async function ask(text) {
   const key = localStorage.getItem("jarvis_key");
   if (!key) { $("settings").style.display = "block"; addMsg("Inserisci prima la chiave API nelle impostazioni.", "bot"); return; }
-  const model = localStorage.getItem("jarvis_model") || "gemini-2.5-flash";
+  const model = localStorage.getItem("jarvis_model") || "gemini-3.5-flash-lite";
   addMsg(text, "user");
   history.push({ role: "user", parts: [{ text }] });
   const wait = addMsg("…", "bot");
+  thinking = true; setState();
   try {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
       method: "POST",
@@ -93,11 +195,14 @@ async function ask(text) {
     const answer = data.candidates[0].content.parts.map(p => p.text || "").join("");
     history.push({ role: "model", parts: [{ text: answer }] });
     wait.textContent = answer;
+    thinking = false; setState();
     speak(answer);
   } catch (e) {
     history.pop();
     wait.textContent = "Errore: " + e.message;
+    thinking = false; setState();
   }
+  $("chat").scrollTop = $("chat").scrollHeight;
 }
 
 function send() {
@@ -110,20 +215,23 @@ $("send").onclick = send;
 $("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false;
+let rec = null;
 $("mic").onclick = () => {
-  speechSynthesis.speak(new SpeechSynthesisUtterance(""));
-  if (!SR) { addMsg("Il riconoscimento vocale non è disponibile. Usa la tastiera (e il microfono della tastiera dell'iPad).", "bot"); return; }
+  if (window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+  if (!SR) { addMsg("Il riconoscimento vocale non è disponibile. Usa il microfono della tastiera dell'iPad.", "bot"); return; }
   if (listening) { rec.stop(); return; }
   rec = new SR();
   rec.lang = "it-IT";
   rec.interimResults = false;
-  rec.onstart = () => { listening = true; $("mic").classList.add("on"); };
-  rec.onend = () => { listening = false; $("mic").classList.remove("on"); };
+  rec.onstart = () => { listening = true; $("mic").classList.add("on"); setState(); };
+  rec.onend = () => { listening = false; $("mic").classList.remove("on"); setState(); };
   rec.onerror = e => addMsg("Errore microfono: " + e.error, "bot");
   rec.onresult = e => ask(e.results[0][0].transcript);
   rec.start();
 };
+
+// avvio
+setTimeout(() => { setState(); addMsg("Sistemi online. Buonasera, sono Jarvis. Come posso aiutarla?", "bot"); }, 1800);
 </script>
 </body>
 </html>
