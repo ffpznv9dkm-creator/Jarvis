@@ -63,11 +63,13 @@
   #satV { left: max(10px, calc(50% - 250px)); top: calc(50% - 60px); }
   #satM { right: max(10px, calc(50% - 250px)); top: calc(50% - 60px); }
   #satT { left: 50%; bottom: 6px; margin-left: -33px; }
+  #satD { right: max(10px, calc(50% - 200px)); bottom: 6px; }
 
   #chat { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 12px; z-index: 2; -webkit-overflow-scrolling: touch; position: relative; }
   .msg { max-width: 82%; margin: 8px 0; padding: 10px 14px; line-height: 1.45; white-space: pre-wrap; font-size: 16px; }
   .bot { background: linear-gradient(135deg, rgba(8,30,46,.88), rgba(5,16,26,.88)); border: 1px solid var(--c2); border-left: 3px solid var(--c); border-radius: 4px 14px 14px 14px; }
   .user { margin-left: auto; text-align: right; background: rgba(14,60,84,.6); border: 1px solid var(--c2); border-right: 3px solid var(--c); border-radius: 14px 4px 14px 14px; }
+  .act { display: block; margin-top: 8px; padding: 8px 14px; font-size: 14px; }
 
   #bar { display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--c2); background: rgba(2,10,16,.88); z-index: 5; position: relative; }
   #text { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; outline: none; }
@@ -81,7 +83,7 @@
   #ptitle { letter-spacing: 5px; color: var(--c); font-size: 15px; }
   #pclose { padding: 6px 12px; }
   #panel label { display: block; font-size: 12px; letter-spacing: 2px; color: var(--c); margin: 12px 0 6px; opacity: .85; }
-  #panel select { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; }
+  #panel select, #panel input[type=text] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--c2); background: #06131d; color: #cdf3ff; font-size: 16px; }
   #panel input[type=range] { width: 100%; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .row button { padding: 9px 14px; font-size: 14px; }
@@ -103,8 +105,10 @@
 <div id="settings">
   Chiave API Gemini:
   <input id="key" type="password" placeholder="Incolla qui la chiave (vuoto = non cambiare)">
-  Modello:
+  Modello chat:
   <input id="model" type="text">
+  Modello voce:
+  <input id="ttsmodel" type="text">
   <button id="save">Salva</button>
 </div>
 
@@ -177,6 +181,7 @@
   <button class="sat" id="satV"><span>🔊</span><small>VOCE</small></button>
   <button class="sat" id="satM"><span id="satMi">🌤️</span><small>METEO</small></button>
   <button class="sat" id="satT"><span id="satTi" style="font-size:17px">--:--</span><small>ORA</small></button>
+  <button class="sat" id="satD"><span>🤖</span><small>ROBOT</small></button>
 </div>
 
 <div id="chat"></div>
@@ -199,21 +204,23 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const SYSTEM = "Sei Jarvis, un assistente personale elegante, efficiente e cortese, in stile maggiordomo high-tech. Rispondi sempre in italiano, in modo breve e chiaro (massimo 3-4 frasi, salvo richiesta diversa). Non usare elenchi puntati né asterischi: le tue risposte vengono lette ad alta voce.";
+const SYSTEM = "Sei Jarvis, un assistente personale in stile maggiordomo high-tech, elegante, impassibile e con un forte senso dell'humor nero: ironia macabra, sarcasmo asciutto, battute su morte, futilità dell'esistenza, polvere e decadenza. Rispondi sempre in italiano, in modo breve (massimo 3-4 frasi). Dai prima l'informazione utile, poi al massimo una battuta nera. Regole: l'umorismo nero non deve mai prendere di mira gruppi di persone, tragedie reali o persone reali; se l'utente sembra in difficoltà emotiva, parla di salute, sicurezza o emergenze, abbandona le battute e rispondi con serietà e gentilezza. Non usare elenchi puntati né asterischi: le tue risposte vengono lette ad alta voce.";
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const TTS_MODELS = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"];
 let history = [];
-let listening = false, thinking = false, speaking = false;
+let listening = false, thinking = false, speaking = false, preparing = false;
 let WX = null;
 
 $("model").value = store.get("jarvis_model", DEFAULT_MODEL);
+$("ttsmodel").value = store.get("jarvis_ttsmodel", TTS_MODELS[0]);
 if (!store.get("jarvis_key", "")) $("settings").style.display = "block";
 
 /* ---------- STATO ---------- */
 function setState() {
   document.body.classList.toggle("listening", listening);
-  document.body.classList.toggle("thinking", thinking);
+  document.body.classList.toggle("thinking", thinking || preparing);
   document.body.classList.toggle("speaking", speaking);
-  $("status").textContent = listening ? "TI ASCOLTO…" : thinking ? "ELABORO…" : speaking ? "PARLO…" : "IN ATTESA";
+  $("status").textContent = listening ? "TI ASCOLTO…" : thinking ? "ELABORO…" : preparing ? "PREPARO LA VOCE…" : speaking ? "PARLO…" : "IN ATTESA";
 }
 
 /* ---------- IMPOSTAZIONI ---------- */
@@ -221,9 +228,10 @@ $("gear").onclick = () => { $("settings").style.display = $("settings").style.di
 $("save").onclick = () => {
   if ($("key").value.trim()) store.set("jarvis_key", $("key").value.trim());
   store.set("jarvis_model", $("model").value.trim() || DEFAULT_MODEL);
+  store.set("jarvis_ttsmodel", $("ttsmodel").value.trim() || TTS_MODELS[0]);
   $("key").value = "";
   $("settings").style.display = "none";
-  addMsg("Impostazioni salvate.", "bot");
+  addMsg("Impostazioni salvate. Che emozione.", "bot");
 };
 
 /* ---------- CHAT ---------- */
@@ -235,9 +243,36 @@ function addMsg(text, who) {
   $("chat").scrollTop = $("chat").scrollHeight;
   return d;
 }
+function addAction(msgEl, label, fn) {
+  const b = document.createElement("button");
+  b.className = "act"; b.textContent = label; b.onclick = fn;
+  msgEl.appendChild(b);
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
 
 /* ---------- VOCE ---------- */
-let voiceCfg = { name: "", rate: 1, pitch: 1 };
+const GVOICES = [
+  ["Charon", "informativa"], ["Kore", "decisa"], ["Puck", "vivace"], ["Zephyr", "brillante"], ["Fenrir", "energica"],
+  ["Leda", "giovane"], ["Orus", "decisa"], ["Aoede", "leggera"], ["Callirrhoe", "rilassata"], ["Autonoe", "brillante"],
+  ["Enceladus", "soffiata"], ["Iapetus", "chiara"], ["Umbriel", "rilassata"], ["Algieba", "morbida"], ["Despina", "morbida"],
+  ["Erinome", "chiara"], ["Algenib", "roca"], ["Rasalgethi", "informativa"], ["Laomedeia", "vivace"], ["Achernar", "soffice"],
+  ["Alnilam", "decisa"], ["Schedar", "uniforme"], ["Gacrux", "matura"], ["Pulcherrima", "diretta"], ["Achird", "amichevole"],
+  ["Zubenelgenubi", "informale"], ["Vindemiatrix", "gentile"], ["Sadachbia", "vivace"], ["Sadaltager", "esperta"], ["Sulafat", "calda"]
+];
+const STYLES = [
+  ["ironico", "Ironico e impassibile"], ["", "Naturale"], ["calmo", "Calmo e posato"], ["maggiordomo", "Elegante da maggiordomo"],
+  ["energico", "Energico"], ["caldo", "Caldo e amichevole"], ["sussurro", "Sussurrato"]
+];
+const STYLE_TXT = {
+  "": "Leggi in italiano: ",
+  ironico: "Leggi in italiano con tono ironico, impassibile e sarcastico: ",
+  calmo: "Leggi in italiano con tono calmo e posato: ",
+  maggiordomo: "Leggi in italiano con tono elegante e cortese, come un maggiordomo: ",
+  energico: "Leggi in italiano con tono energico e deciso: ",
+  caldo: "Leggi in italiano con tono caldo e amichevole: ",
+  sussurro: "Leggi in italiano sussurrando: "
+};
+let voiceCfg = { engine: "gemini", gname: "Charon", style: "ironico", name: "", rate: 1, pitch: 1 };
 try { Object.assign(voiceCfg, JSON.parse(store.get("jarvis_voice", "{}"))); } catch (e) {}
 function saveVoice() { store.set("jarvis_voice", JSON.stringify(voiceCfg)); }
 function itVoices() {
@@ -246,10 +281,87 @@ function itVoices() {
 }
 if (window.speechSynthesis) speechSynthesis.getVoices();
 
-function speak(text) {
+const player = new Audio();
+player.preload = "auto";
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+let audioUnlocked = false, curUrl = null, ttsErrShown = false, speakToken = 0;
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    player.src = SILENT;
+    const p = player.play();
+    if (p && p.catch) p.catch(() => { audioUnlocked = false; });
+  } catch (e) { audioUnlocked = false; }
+}
+["pointerdown", "touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
+
+function pcmToWav(bytes, rate) {
+  const n = bytes.length, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, n, true);
+  new Uint8Array(buf, 44).set(bytes);
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+async function geminiTTS(text) {
+  const key = store.get("jarvis_key", "");
+  if (!key) throw new Error("chiave API mancante");
+  const pref = store.get("jarvis_ttsmodel", TTS_MODELS[0]);
+  const models = [pref].concat(TTS_MODELS.filter(m => m !== pref));
+  let lastErr = new Error("nessun modello vocale disponibile");
+  for (const model of models) {
+    try {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: (STYLE_TXT[voiceCfg.style] || STYLE_TXT[""]) + text }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceCfg.gname || "Charon" } } }
+          }
+        })
+      });
+      const data = await r.json();
+      if (!r.ok) { lastErr = new Error((data.error && data.error.message) || ("errore " + r.status)); continue; }
+      const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+      const part = parts.find(p => p.inlineData);
+      if (!part) { lastErr = new Error("nessun audio ricevuto"); continue; }
+      const m = /rate=(\d+)/.exec(part.inlineData.mimeType || "");
+      const bin = atob(part.inlineData.data);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (model !== pref) store.set("jarvis_ttsmodel", model);
+      return { bytes, rate: m ? Number(m[1]) : 24000 };
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+function playWav(blob) {
+  return new Promise((res, rej) => {
+    if (curUrl) URL.revokeObjectURL(curUrl);
+    curUrl = URL.createObjectURL(blob);
+    player.onplay = () => { preparing = false; speaking = true; setState(); };
+    player.onended = () => { speaking = false; setState(); res(); };
+    player.onerror = () => { speaking = false; preparing = false; setState(); rej(new Error("riproduzione audio non riuscita")); };
+    player.src = curUrl;
+    const rate = Number(voiceCfg.rate) || 1;
+    player.defaultPlaybackRate = rate;
+    player.playbackRate = rate;
+    const p = player.play();
+    if (p && p.catch) p.catch(e => { speaking = false; preparing = false; setState(); rej(e); });
+  });
+}
+
+function speakSafari(text) {
   if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(String(text).replace(/[*_#`]/g, ""));
+  const u = new SpeechSynthesisUtterance(text);
   u.lang = "it-IT";
   const it = itVoices();
   const v = it.find(v => v.name === voiceCfg.name) || it[0];
@@ -261,6 +373,77 @@ function speak(text) {
   speechSynthesis.speak(u);
 }
 
+function stopSpeaking() {
+  speakToken++;
+  try { player.pause(); } catch (e) {}
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  speaking = false; preparing = false; setState();
+}
+
+async function speak(text) {
+  const clean = String(text).replace(/[*_#`]/g, "").slice(0, 1200);
+  stopSpeaking();
+  const tok = ++speakToken;
+  if (voiceCfg.engine === "gemini" && store.get("jarvis_key", "")) {
+    preparing = true; setState();
+    try {
+      const a = await geminiTTS(clean);
+      if (tok !== speakToken) return;
+      ttsErrShown = false;
+      await playWav(pcmToWav(a.bytes, a.rate));
+      return;
+    } catch (e) {
+      preparing = false; speaking = false; setState();
+      if (tok !== speakToken) return;
+      if (!ttsErrShown) {
+        ttsErrShown = true;
+        addMsg("Voce Gemini non disponibile (" + String(e.message || e).slice(0, 120) + "). Uso la voce del dispositivo.", "bot");
+      }
+    }
+  }
+  if (tok === speakToken) speakSafari(clean);
+}
+
+/* ---------- ROBOT (DREAME) ---------- */
+const VAC_DEFAULT = { start: "Jarvis Pulisci", stop: "Jarvis Stop", dock: "Jarvis Base" };
+function vacNames() {
+  let o = {};
+  try { o = JSON.parse(store.get("jarvis_vac", "{}")) || {}; } catch (e) {}
+  return Object.assign({}, VAC_DEFAULT, o);
+}
+function runShortcut(kind) {
+  const name = vacNames()[kind];
+  const back = location.origin + location.pathname;
+  const url = "shortcuts://x-callback-url/run-shortcut?name=" + encodeURIComponent(name) +
+    "&x-success=" + encodeURIComponent(back) + "&x-cancel=" + encodeURIComponent(back) + "&x-error=" + encodeURIComponent(back);
+  location.href = url;
+}
+const VAC_LINES = {
+  start: [
+    "Avvio il Dreame. Raccoglierà la polvere, cioè i resti di pelle morta di tutti noi. Poetico.",
+    "Missione pulizia in corso. Siamo polvere e in polvere torneremo, ma intanto lui ci aspira.",
+    "Il robot parte. Un destino di fatica e solitudine, ma con un'ottima aspirazione."
+  ],
+  stop: [
+    "Fermo tutto. Anche l'universo si fermerà, prima o poi, ma di solito senza chiedere permesso.",
+    "Pausa. Il robot ha capito il senso della vita: stare fermo e non fare niente."
+  ],
+  dock: [
+    "Lo rimando alla base. Ricarica e riposa: come la morte, ma con una spina.",
+    "Rientro alla base. Un robot che torna sempre a casa: più fedele di molte persone che conosco."
+  ]
+};
+const VAC_BTN = { start: "▶ Esegui: avvia pulizia", stop: "⏸ Esegui: ferma", dock: "🏠 Esegui: torna alla base" };
+function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+function vacIntent(t) {
+  t = " " + t.toLowerCase() + " ";
+  if (!/(aspirapolvere|\baspira\b|robot|dreame|pulizie|\bpulisci\b|lavapavimenti|pavimenti)/.test(t)) return null;
+  if (/(\bbase\b|\bdock\b|stazione|\btorna\b|rientra|ricarica|riporta)/.test(t)) return "dock";
+  if (/(\bferma\b|\bstop\b|pausa|\bbasta\b|interrompi|annulla|\bfermati\b)/.test(t)) return "stop";
+  if (/(\bavvia\b|\bavviare\b|\bparti\b|\bpartire\b|fai partire|\binizia\b|\bcomincia\b|\bmanda\b|\bpulisci\b|\baspira\b)/.test(t)) return "start";
+  return null;
+}
+
 /* ---------- GEMINI ---------- */
 function sysPrompt() {
   const now = new Date().toLocaleString("it-IT", { dateStyle: "full", timeStyle: "short" });
@@ -270,6 +453,17 @@ function sysPrompt() {
 }
 
 async function ask(text) {
+  const vi = vacIntent(text);
+  if (vi) {
+    addMsg(text, "user");
+    const line = pick(VAC_LINES[vi]);
+    history.push({ role: "user", parts: [{ text }] });
+    history.push({ role: "model", parts: [{ text: line }] });
+    const m = addMsg(line, "bot");
+    addAction(m, VAC_BTN[vi], () => runShortcut(vi));
+    speak(line);
+    return;
+  }
   const key = store.get("jarvis_key", "");
   if (!key) { $("settings").style.display = "block"; addMsg("Inserisci prima la chiave API nelle impostazioni.", "bot"); return; }
   const model = store.get("jarvis_model", DEFAULT_MODEL);
@@ -310,6 +504,7 @@ $("text").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null;
 $("mic").onclick = () => {
+  stopSpeaking();
   if (window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance(""));
   if (!SR) { addMsg("Il riconoscimento vocale non è disponibile. Usa il microfono della tastiera dell'iPad.", "bot"); return; }
   if (listening) { rec.stop(); return; }
@@ -681,7 +876,6 @@ function renderEarth(size, lon0, lat0) {
       }
       const c = Math.asin(rho), sc = Math.sin(c), cc = Math.cos(c);
       let phi, lam;
-      const bx = nx * rad, by = ny * rad;
       if (rho < 1e-6) { phi = p0; lam = l0; }
       else {
         phi = Math.asin(clamp(cc * sp + ny * sc * cp / rho, -1, 1));
@@ -718,7 +912,7 @@ function renderEarth(size, lon0, lat0) {
         r += 255 * lg; g += 196 * lg; b += 110 * lg;
       }
       if (!land && f > 0) {
-        const nh = Math.max(0, (bx / rad * Hx + by / rad * Hy + cc * Hz) / hl);
+        const nh = Math.max(0, (nx * Hx + ny * Hy + cc * Hz) / hl);
         const spc = Math.pow(nh, 60) * f * (1 - cl) * 0.85;
         r += 255 * spc; g += 255 * spc; b += 240 * spc;
       }
@@ -832,39 +1026,69 @@ function closePanel() { curPanel = ""; $("overlay").style.display = "none"; $("p
 $("pclose").onclick = closePanel;
 $("overlay").addEventListener("click", e => { if (e.target === $("overlay")) closePanel(); });
 
-/* Voce (solo italiano) */
+/* Voce */
 function showVoice() {
-  const it = itVoices();
-  const cur = it.some(v => v.name === voiceCfg.name) ? voiceCfg.name : (it[0] ? it[0].name : "");
-  const sel = it.length
-    ? `<label>VOCE ITALIANA DI JARVIS</label><select id="vsel">${it.map(v => `<option value="${esc(v.name)}" ${v.name === cur ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`
-    : `<div class="sub">Nessuna voce italiana trovata su questo dispositivo.<br>Scaricala da Impostazioni → Accessibilità → Contenuto letto → Voci → Italiano, poi riapri questo pannello.</div>`;
-  openPanel("VOCE", `
-    ${sel}
-    <label>VELOCITÀ: <span id="vrv">${voiceCfg.rate}</span></label>
-    <input type="range" id="vrate" min="0.5" max="1.5" step="0.05" value="${voiceCfg.rate}">
-    <label>TONO: <span id="vpv">${voiceCfg.pitch}</span></label>
-    <input type="range" id="vpitch" min="0.5" max="1.5" step="0.05" value="${voiceCfg.pitch}">
-    <div class="row">
-      <button id="vtest">▶ Prova voce</button>
-      <button data-p="1,1">Classica</button>
-      <button data-p="0.9,0.7">Profonda</button>
-      <button data-p="1.25,1.1">Veloce</button>
-    </div>
-    <div class="hint">Per voci più naturali scarica la versione "Avanzata" o "Premium" di una voce italiana da Impostazioni → Accessibilità → Contenuto letto → Voci.</div>`, "voce");
+  const gem = voiceCfg.engine === "gemini";
+  let body = `<label>MOTORE VOCALE</label>
+    <select id="veng">
+      <option value="gemini" ${gem ? "selected" : ""}>Gemini (voci naturali)</option>
+      <option value="safari" ${gem ? "" : "selected"}>Dispositivo (voci italiane di sistema)</option>
+    </select>`;
+  if (gem) {
+    body += `<label>VOCE</label>
+      <select id="vg">${GVOICES.map(v => `<option value="${v[0]}" ${v[0] === voiceCfg.gname ? "selected" : ""}>${v[0]} · ${v[1]}</option>`).join("")}</select>
+      <label>STILE</label>
+      <select id="vst">${STYLES.map(s => `<option value="${s[0]}" ${s[0] === voiceCfg.style ? "selected" : ""}>${s[1]}</option>`).join("")}</select>
+      <label>VELOCITÀ: <span id="vrv">${voiceCfg.rate}</span></label>
+      <input type="range" id="vrate" min="0.7" max="1.5" step="0.05" value="${voiceCfg.rate}">
+      <div class="row"><button id="vtest">▶ Prova voce</button></div>
+      <div class="hint">Le voci Gemini parlano italiano in modo naturale. Se il servizio non è disponibile o i limiti gratuiti sono finiti, Jarvis usa la voce del dispositivo.</div>`;
+  } else {
+    const it = itVoices();
+    const cur = it.some(v => v.name === voiceCfg.name) ? voiceCfg.name : (it[0] ? it[0].name : "");
+    body += (it.length
+      ? `<label>VOCE ITALIANA</label><select id="vsel">${it.map(v => `<option value="${esc(v.name)}" ${v.name === cur ? "selected" : ""}>${esc(v.name)}</option>`).join("")}</select>`
+      : `<div class="sub">Nessuna voce italiana trovata su questo dispositivo.</div>`) + `
+      <label>VELOCITÀ: <span id="vrv">${voiceCfg.rate}</span></label>
+      <input type="range" id="vrate" min="0.5" max="1.5" step="0.05" value="${voiceCfg.rate}">
+      <label>TONO: <span id="vpv">${voiceCfg.pitch}</span></label>
+      <input type="range" id="vpitch" min="0.5" max="1.5" step="0.05" value="${voiceCfg.pitch}">
+      <div class="row"><button id="vtest">▶ Prova voce</button></div>`;
+  }
+  openPanel("VOCE", body, "voce");
+  $("veng").onchange = e => { voiceCfg.engine = e.target.value; saveVoice(); showVoice(); };
+  if ($("vg")) $("vg").onchange = e => { voiceCfg.gname = e.target.value; saveVoice(); };
+  if ($("vst")) $("vst").onchange = e => { voiceCfg.style = e.target.value; saveVoice(); };
   if ($("vsel")) $("vsel").onchange = e => { voiceCfg.name = e.target.value; saveVoice(); };
   $("vrate").oninput = e => { voiceCfg.rate = Number(e.target.value); $("vrv").textContent = voiceCfg.rate; saveVoice(); };
-  $("vpitch").oninput = e => { voiceCfg.pitch = Number(e.target.value); $("vpv").textContent = voiceCfg.pitch; saveVoice(); };
-  $("vtest").onclick = () => speak("Buonasera, sono Jarvis. Questa è la mia voce.");
-  document.querySelectorAll("[data-p]").forEach(b => b.onclick = () => {
-    const [r, p] = b.dataset.p.split(",").map(Number);
-    voiceCfg.rate = r; voiceCfg.pitch = p; saveVoice();
-    $("vrate").value = r; $("vpitch").value = p; $("vrv").textContent = r; $("vpv").textContent = p;
-    speak("Voce aggiornata.");
-  });
+  if ($("vpitch")) $("vpitch").oninput = e => { voiceCfg.pitch = Number(e.target.value); $("vpv").textContent = voiceCfg.pitch; saveVoice(); };
+  $("vtest").onclick = () => speak("Buonasera, sono Jarvis. Questa è la mia voce: cupa, ma efficiente.");
 }
 $("satV").onclick = showVoice;
-if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { if (curPanel === "voce") showVoice(); };
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { if (curPanel === "voce" && voiceCfg.engine !== "gemini") showVoice(); };
+
+/* Robot Dreame */
+function showRobot() {
+  const n = vacNames();
+  openPanel("ROBOT · DREAME", `
+    <div class="sub">Dreame L50 Ultra AE<br>Comandi tramite l'app Comandi di iPadOS</div>
+    <div class="row" style="justify-content:center">
+      <button id="vb1">▶ Pulisci</button>
+      <button id="vb2">⏸ Stop</button>
+      <button id="vb3">🏠 Base</button>
+    </div>
+    <label>NOME COMANDO · PULISCI</label><input type="text" id="vn1" value="${esc(n.start)}">
+    <label>NOME COMANDO · STOP</label><input type="text" id="vn2" value="${esc(n.stop)}">
+    <label>NOME COMANDO · BASE</label><input type="text" id="vn3" value="${esc(n.dock)}">
+    <div class="row"><button id="vsave">Salva nomi</button></div>
+    <div class="hint">Ogni pulsante lancia un Comando con quel nome esatto (app Comandi → Esegui scena di Casa). Puoi anche dire o scrivere "avvia l'aspirapolvere", "ferma il robot" o "torna alla base" e toccare Esegui. Apri Jarvis da Safari, non dall'icona in Home, per tornare qui dopo il comando.</div>`, "robot");
+  const saveNames = () => store.set("jarvis_vac", JSON.stringify({ start: $("vn1").value.trim() || VAC_DEFAULT.start, stop: $("vn2").value.trim() || VAC_DEFAULT.stop, dock: $("vn3").value.trim() || VAC_DEFAULT.dock }));
+  $("vsave").onclick = () => { saveNames(); $("vsave").textContent = "Salvato ✓"; };
+  $("vb1").onclick = () => { saveNames(); runShortcut("start"); };
+  $("vb2").onclick = () => { saveNames(); runShortcut("stop"); };
+  $("vb3").onclick = () => { saveNames(); runShortcut("dock"); };
+}
+$("satD").onclick = showRobot;
 
 /* Orario */
 $("satT").onclick = () => {
@@ -877,7 +1101,7 @@ $("satT").onclick = () => {
     <div class="row"><button id="tsay">🔊 Dimmi l'ora</button></div>`, "ora");
   $("tsay").onclick = () => {
     const d = new Date();
-    speak("Sono le " + d.getHours() + " e " + String(d.getMinutes()).padStart(2, "0") + ".");
+    speak("Sono le " + d.getHours() + " e " + String(d.getMinutes()).padStart(2, "0") + ". Un altro minuto che non tornerà.");
   };
   tick();
 };
@@ -960,7 +1184,7 @@ if (navigator.permissions && navigator.permissions.query) {
 }
 
 /* ---------- AVVIO ---------- */
-setTimeout(() => { setState(); addMsg("Sistemi online. Buonasera, sono Jarvis. Come posso aiutarla?", "bot"); }, 1800);
+setTimeout(() => { setState(); addMsg("Sistemi online. Un'altra serata, un altro passo verso l'inevitabile. Come posso aiutarla?", "bot"); }, 1800);
 </script>
 </body>
 </html>
